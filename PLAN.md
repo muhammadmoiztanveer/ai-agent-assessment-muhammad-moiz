@@ -18,8 +18,8 @@ This is the master checklist. Nothing ships until every row is ✅. (Status fill
 | R1  | Explicit DAG via LangGraph, named nodes/edges (§3.1)                                            | `app/graph/build.py`                | ☐      |
 | R2  | Conditional routing + fallback path (§3.1)                                                      | `app/graph/edges.py`                | ☐      |
 | R3  | DAG diagram in README (§3.1)                                                                    | `README.md` (Mermaid)               | ☐      |
-| R4  | 5 atomic single-responsibility agents (§3.2)                                                    | `app/agents/*.py`                   | ☐      |
-| R5  | No agent does two jobs (§3.2)                                                                   | Code review + node contracts        | ☐      |
+| R4  | 5 atomic single-responsibility agents (§3.2)                                                    | `app/agents/*.py`                   | ✅     |
+| R5  | No agent does two jobs (§3.2)                                                                   | Typed contracts + per-agent tests   | ✅     |
 | R6  | Tools defined with Pydantic/JSON schemas (§3.3)                                                 | `app/tools/schemas.py`              | ✅     |
 | R7  | LLM decides tool + args; validate args before real call (§3.3)                                  | `app/tools/base.py`                 | ✅     |
 | R8  | Graceful handling of malformed/partial tool args (§3.3)                                         | `app/tools/base.py`                 | ✅     |
@@ -45,7 +45,7 @@ This is the master checklist. Nothing ships until every row is ✅. (Status fill
 | R28 | Tests: happy path, simulated failure+retry/fallback, tool-arg validation (§5)                   | `tests/`                            | ☐      |
 | R29 | `.env.example` documenting config (§5)                                                          | `.env.example`                      | ☐      |
 | R30 | Single-command run + clear git history (§7)                                                     | `Makefile`, commits                 | ☐      |
-| R31 | opportunity_score formula documented (§4.2)                                                     | `app/agents/analysis.py` + README   | ☐      |
+| R31 | opportunity_score formula documented (§4.2)                                                     | `app/agents/analysis.py` + README   | ✅     |
 | R32 | total tokens used surfaced (§4.2)                                                               | token callback in LLM client        | ✅     |
 
 > **Rule:** If you cannot point at a file/test that proves a row, it is not done.
@@ -657,10 +657,11 @@ and a **git commit** (clear history, §7/R30).
 - [x] Verified: ruff + black clean (44 files), mypy clean (37 files), **pytest 102 passed** (+23); live demo confirmed keyless→mock, OpenAI tool render, cumulative tokens 115 (=40+75), usage callback.
 - **Commit:** "feat(llm): provider client, tool binding, token accounting". (R32; R7 tool-choice seam)
 
-### Phase 6 — Agents (the 5, atomic)
+### Phase 6 — Agents (the 5, atomic) ✅
 
-- [ ] `planner.py`, `retrieval.py`, `extraction.py`, `analysis.py` (+ opportunity_score), `report.py`.
-- [ ] Unit test each agent in isolation (proves single responsibility).
+- [x] `types.py` (typed agent contracts, reuse persistence enums), `planner.py`, `retrieval.py`, `extraction.py`, `analysis.py` (+ `opportunity_score`), `report.py`.
+- [x] Unit test each agent in isolation (`tests/test_agents.py`, 17 tests) — proves single responsibility, formula correctness + [0,1] bounds, LLM vs deterministic paths, failure classification.
+- [x] Verified: black + ruff clean (51 files), mypy clean (43 files), **pytest 119 passed** (+17); chained keyless demo confirmed plan→retrieve→extract→analyze→report.
 - **Commit:** "feat(agents): 5 atomic single-responsibility agents". (R4, R5, R31)
 
 ### Phase 7 — Graph assembly
