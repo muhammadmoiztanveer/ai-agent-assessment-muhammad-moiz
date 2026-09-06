@@ -24,7 +24,11 @@ export function Recommendations({
       const data = await listRecommendations(profileUuid);
       setItems(data.items);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load recommendations.");
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not load recommendations.",
+      );
       setItems([]);
     } finally {
       setLoading(false);
@@ -37,7 +41,7 @@ export function Recommendations({
 
   return (
     <Card
-      title="4 · Content recommendations"
+      title="5 · Content recommendations"
       description="Prioritized content ideas targeting the highest-opportunity queries."
     >
       {loading ? (
@@ -49,7 +53,10 @@ export function Recommendations({
           {error}
         </Banner>
       ) : items.length === 0 ? (
-        <EmptyState title="No recommendations yet" hint="Run the pipeline to generate them." />
+        <EmptyState
+          title="No recommendations yet"
+          hint="Run the pipeline to generate them."
+        />
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2">
           {items.map((rec) => (
@@ -58,11 +65,15 @@ export function Recommendations({
               className="flex flex-col gap-2 rounded-xl border border-slate-200 p-4 dark:border-slate-800"
             >
               <div className="flex items-start justify-between gap-2">
-                <h3 className="font-medium text-slate-900 dark:text-slate-100">{rec.title}</h3>
+                <h3 className="font-medium text-slate-900 dark:text-slate-100">
+                  {rec.title}
+                </h3>
                 <Badge tone={priorityTone(rec.priority)}>{rec.priority}</Badge>
               </div>
               <Badge tone="violet">{contentTypeLabel(rec.content_type)}</Badge>
-              <p className="text-sm text-slate-500 dark:text-slate-400">{rec.rationale}</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {rec.rationale}
+              </p>
               {rec.target_keywords.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {rec.target_keywords.map((kw) => (

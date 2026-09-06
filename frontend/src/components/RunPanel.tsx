@@ -4,6 +4,7 @@ import type {
   Insight,
   ProfileCreatedResponse,
   RunResponse,
+  SimulateMode,
 } from "../lib/types";
 import {
   formatInt,
@@ -23,6 +24,7 @@ export function RunPanel({
   asyncMode,
   onAsyncModeChange,
   onRun,
+  onSimulate,
   onReset,
 }: {
   profile: ProfileCreatedResponse;
@@ -32,6 +34,7 @@ export function RunPanel({
   asyncMode: boolean;
   onAsyncModeChange: (value: boolean) => void;
   onRun: () => void;
+  onSimulate: (mode: SimulateMode) => void;
   onReset: () => void;
 }) {
   return (
@@ -77,6 +80,30 @@ export function RunPanel({
           <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
             {profile.profile_uuid.slice(0, 8)}…
           </code>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-800/40">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            Resilience demo:
+          </span>
+          <Button
+            variant="secondary"
+            onClick={() => onSimulate("degraded")}
+            disabled={running}
+          >
+            Simulate partial failure
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => onSimulate("outage")}
+            disabled={running}
+          >
+            Simulate total outage
+          </Button>
+          <span className="text-xs text-slate-400 dark:text-slate-500">
+            injects a dependency failure to show retries → circuit breaker →
+            fallback
+          </span>
         </div>
 
         {running && (

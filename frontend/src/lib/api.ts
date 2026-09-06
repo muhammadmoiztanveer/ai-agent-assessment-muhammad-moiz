@@ -17,6 +17,7 @@ import type {
   RecheckResponse,
   RecommendationListResponse,
   RunResponse,
+  SimulateMode,
 } from "./types";
 
 export const API_BASE_URL: string =
@@ -107,12 +108,16 @@ export function getProfile(
  */
 export function runPipeline(
   profileUuid: string,
-  options: { async?: boolean } = {},
+  options: { async?: boolean; simulate?: SimulateMode | null } = {},
 ): Promise<RunResponse> {
-  const qs = options.async ? "?async=true" : "";
-  return apiFetch<RunResponse>(`/api/v1/profiles/${profileUuid}/run${qs}`, {
-    method: "POST",
-  });
+  const params = new URLSearchParams();
+  if (options.simulate) params.set("simulate", options.simulate);
+  else if (options.async) params.set("async", "true");
+  const qs = params.toString();
+  return apiFetch<RunResponse>(
+    `/api/v1/profiles/${profileUuid}/run${qs ? `?${qs}` : ""}`,
+    { method: "POST" },
+  );
 }
 
 /** Fetch the current status and result of a run (for polling async runs). */

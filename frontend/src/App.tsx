@@ -1,9 +1,14 @@
 import { useState } from "react";
 import { ApiError, getRun, runPipeline } from "./lib/api";
-import type { ProfileCreatedResponse, RunResponse } from "./lib/types";
+import type {
+  ProfileCreatedResponse,
+  RunResponse,
+  SimulateMode,
+} from "./lib/types";
 import { Header } from "./components/Header";
 import { ProfileForm } from "./components/ProfileForm";
 import { RunPanel } from "./components/RunPanel";
+import { ObservabilityPanel } from "./components/ObservabilityPanel";
 import { QueriesTable } from "./components/QueriesTable";
 import { Recommendations } from "./components/Recommendations";
 import { ReportView } from "./components/ReportView";
@@ -54,6 +59,25 @@ export default function App() {
     }
   }
 
+  async function handleSimulate(mode: SimulateMode) {
+    if (!profile) return;
+    setRunning(true);
+    setRunError(null);
+    try {
+      const result = await runPipeline(profile.profile_uuid, {
+        simulate: mode,
+      });
+      setRun(result);
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      setRunError(
+        err instanceof ApiError ? err.message : "The simulated run failed.",
+      );
+    } finally {
+      setRunning(false);
+    }
+  }
+
   function handleReset() {
     setProfile(null);
     setRun(null);
@@ -76,11 +100,13 @@ export default function App() {
               asyncMode={asyncMode}
               onAsyncModeChange={setAsyncMode}
               onRun={handleRun}
+              onSimulate={handleSimulate}
               onReset={handleReset}
             />
 
             {run && (
               <>
+                <ObservabilityPanel run={run} />
                 <QueriesTable
                   profileUuid={profile.profile_uuid}
                   refreshKey={refreshKey}

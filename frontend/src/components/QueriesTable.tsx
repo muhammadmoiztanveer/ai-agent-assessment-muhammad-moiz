@@ -49,7 +49,9 @@ export function QueriesTable({
       setTotalPages(data.total_pages);
       setTotal(data.total);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load queries.");
+      setError(
+        err instanceof ApiError ? err.message : "Could not load queries.",
+      );
       setRows([]);
     } finally {
       setLoading(false);
@@ -83,7 +85,7 @@ export function QueriesTable({
 
   return (
     <Card
-      title="3 · Discovered queries"
+      title="4 · Discovered queries"
       description="Sorted by opportunity score (highest first). Filter, paginate, and recheck any row."
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -94,7 +96,9 @@ export function QueriesTable({
             id="q-min"
             className={SELECT}
             value={minScore ?? ""}
-            onChange={(e) => setMinScore(e.target.value ? Number(e.target.value) : null)}
+            onChange={(e) =>
+              setMinScore(e.target.value ? Number(e.target.value) : null)
+            }
           >
             <option value="">Any score</option>
             <option value="0.3">≥ 0.30</option>
@@ -109,7 +113,9 @@ export function QueriesTable({
             className={SELECT}
             value={status ?? ""}
             onChange={(e) =>
-              setStatus(e.target.value ? (e.target.value as VisibilityStatus) : null)
+              setStatus(
+                e.target.value ? (e.target.value as VisibilityStatus) : null,
+              )
             }
           >
             <option value="">All statuses</option>
@@ -177,7 +183,9 @@ export function QueriesTable({
                       <span className="block truncate font-medium text-slate-900 dark:text-slate-100">
                         {row.query_text}
                       </span>
-                      <span className="text-xs text-slate-400">{formatDate(row.discovered_at)}</span>
+                      <span className="text-xs text-slate-400">
+                        {formatDate(row.discovered_at)}
+                      </span>
                     </td>
                     <td className="px-3 py-2.5 text-right font-semibold text-slate-900 dark:text-slate-100">
                       {formatScore(row.opportunity_score)}
@@ -191,7 +199,8 @@ export function QueriesTable({
                     <td className="px-3 py-2.5">
                       <Badge tone={visibilityTone(row.visibility_status)}>
                         {visibilityLabel(row.visibility_status)}
-                        {row.visibility_position != null && ` · #${row.visibility_position}`}
+                        {row.visibility_position != null &&
+                          ` · #${row.visibility_position}`}
                       </Badge>
                     </td>
                     <td className="px-3 py-2.5 text-right">
@@ -211,7 +220,8 @@ export function QueriesTable({
 
           <div className="mt-4 flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
             <span>
-              {total} quer{total === 1 ? "y" : "ies"} · page {page} of {totalPages}
+              {total} quer{total === 1 ? "y" : "ies"} · page {page} of{" "}
+              {totalPages}
             </span>
             <div className="flex items-center gap-2">
               <Button

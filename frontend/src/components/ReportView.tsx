@@ -10,19 +10,23 @@ export function ReportView({ run }: { run: RunResponse }) {
 
   return (
     <Card
-      title="5 · Report"
+      title="6 · Report"
       description="The final deliverable: a human-readable summary plus the structured JSON."
     >
       <div className="space-y-4">
         <div>
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Summary</h3>
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            Summary
+          </h3>
           <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-slate-600 dark:text-slate-300">
             {run.report.report_summary}
           </p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-400">
-          <p className="font-semibold uppercase tracking-wide text-slate-400">Run trace</p>
+          <p className="font-semibold uppercase tracking-wide text-slate-400">
+            Run trace
+          </p>
           <dl className="mt-2 grid gap-1 sm:grid-cols-2">
             <TraceLine label="Run UUID" value={run.run_uuid} mono />
             <TraceLine label="Correlation ID" value={run.correlation_id} mono />
@@ -54,11 +58,21 @@ export function ReportView({ run }: { run: RunResponse }) {
   );
 }
 
-function TraceLine({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function TraceLine({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
   return (
     <div className="flex gap-2">
       <dt className="shrink-0 font-medium text-slate-400">{label}:</dt>
-      <dd className={`truncate text-slate-600 dark:text-slate-300 ${mono ? "font-mono" : ""}`}>
+      <dd
+        className={`truncate text-slate-600 dark:text-slate-300 ${mono ? "font-mono" : ""}`}
+      >
         {value}
       </dd>
     </div>

@@ -73,6 +73,38 @@ export interface Report {
   report_summary: string;
 }
 
+export type NodeName =
+  | "plan_queries"
+  | "retrieve_data"
+  | "normalize_data"
+  | "analyze_data"
+  | "build_report"
+  | "fallback";
+
+export interface NodeMetric {
+  node: NodeName | string;
+  duration_ms: number;
+  success: boolean;
+  retry_count: number;
+  api_calls: number;
+  error_code: string | null;
+}
+
+export interface Observability {
+  correlation_id: string;
+  total_duration_ms: number;
+  node_count: number;
+  success_count: number;
+  failure_count: number;
+  success_rate: number;
+  total_api_calls: number;
+  total_retries: number;
+  total_tokens: number;
+  nodes: NodeMetric[];
+}
+
+export type SimulateMode = "outage" | "degraded";
+
 export interface RunResponse {
   run_uuid: string;
   profile_uuid: string;
@@ -87,6 +119,7 @@ export interface RunResponse {
   correlation_id: string;
   started_at: string;
   finished_at: string | null;
+  observability: Observability | null;
 }
 
 export interface QueryRow {
