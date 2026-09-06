@@ -46,7 +46,7 @@ This is the master checklist. Nothing ships until every row is ✅. (Status fill
 | R29 | `.env.example` documenting config (§5)                                                          | `.env.example`                      | ☐      |
 | R30 | Single-command run + clear git history (§7)                                                     | `Makefile`, commits                 | ☐      |
 | R31 | opportunity_score formula documented (§4.2)                                                     | `app/agents/analysis.py` + README   | ☐      |
-| R32 | total tokens used surfaced (§4.2)                                                               | token callback in LLM client        | ☐      |
+| R32 | total tokens used surfaced (§4.2)                                                               | token callback in LLM client        | ✅     |
 
 > **Rule:** If you cannot point at a file/test that proves a row, it is not done.
 
@@ -646,11 +646,16 @@ and a **git commit** (clear history, §7/R30).
 - [x] Verified: ruff + black clean (39 files), mypy clean (33 files), pytest 79 passed.
 - **Commit:** "feat(tools): typed DataForSEO tools + validating wrapper + mock client". (R6–R10, R13)
 
-### Phase 5 — LLM layer
+### Phase 5 — LLM layer ✅
 
-- [ ] `llm/client.py` (factory, tool binding, token-usage callback), `llm/prompts.py`.
-- [ ] Mock LLM for tests (deterministic plans/tool calls).
-- **Commit:** "feat(llm): provider client, tool binding, token accounting". (R32)
+- [x] `llm/base.py` — provider-neutral vocabulary (`Message`, `ToolSpec`, `ToolCall`, `TokenUsage`, `LLMResponse`, `LLMRequest`) + `LLMClient` ABC with built-in token accounting + `specs_from_tools`.
+- [x] `llm/client.py` — `OpenAILLMClient` (LangChain `ChatOpenAI` adapter: tool binding so the model chooses tool+args, `usage_metadata`→`TokenUsage`, resilient `retry_call` with LLM-aware error classification) + `build_llm` factory (real client vs deterministic mock).
+- [x] `llm/mock.py` — `ScriptedLLMClient` (canned responses / responder callable; deterministic for tests and the keyless runtime path).
+- [x] `llm/prompts.py` — 5 versioned atomic-agent system prompts (`PROMPT_VERSION`, `get_prompt`).
+- [x] Config: `LLM_MODE` (`auto`|`openai`|`mock`), `LLM_MAX_RETRIES`, `use_real_llm` property, `openai`-mode key validator; `.env.example` documented.
+- [x] Tests: `tests/test_llm.py` (23 tests) — types, tool binding/OpenAI render, prompts, scripted client + token accounting, OpenAI client via injected fake chat model (content/tool-call/usage extraction, retry-then-succeed, non-retryable fast-fail, 5xx exhaustion), factory selection.
+- [x] Verified: ruff + black clean (44 files), mypy clean (37 files), **pytest 102 passed** (+23); live demo confirmed keyless→mock, OpenAI tool render, cumulative tokens 115 (=40+75), usage callback.
+- **Commit:** "feat(llm): provider client, tool binding, token accounting". (R32; R7 tool-choice seam)
 
 ### Phase 6 — Agents (the 5, atomic)
 
