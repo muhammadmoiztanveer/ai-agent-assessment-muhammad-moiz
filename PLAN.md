@@ -34,12 +34,12 @@ This is the master checklist. Nothing ships until every row is ✅. (Status fill
 | R17 | Trace across run (correlation ID) (§3.6)                                                        | `app/observability/tracing.py`      | ✅     |
 | R18 | Metrics: latency, success/fail rate, API call counts (§3.6)                                     | `app/observability/metrics.py`      | ✅     |
 | R19 | README: production observability roadmap (§3.6)                                                 | `README.md`                         | ☐      |
-| R20 | `POST /api/v1/profiles` → 201 shape (§4.1)                                                      | `app/api/routes/profiles.py`        | ☐      |
-| R21 | `GET /api/v1/profiles/{uuid}` + summary stats (§4.1)                                            | `app/api/routes/profiles.py`        | ☐      |
-| R22 | `POST /api/v1/profiles/{uuid}/run` full DAG + response fields (§4.2)                            | `app/api/routes/runs.py`            | ☐      |
-| R23 | `GET /api/v1/profiles/{uuid}/queries` filters+pagination+fields (§4.2)                          | `app/api/routes/queries.py`         | ☐      |
-| R24 | `GET /api/v1/profiles/{uuid}/recommendations` + fields (§4.2)                                   | `app/api/routes/recommendations.py` | ☐      |
-| R25 | `POST /api/v1/queries/{uuid}/recheck` partial re-run (§4.2)                                     | `app/api/routes/queries.py`         | ☐      |
+| R20 | `POST /api/v1/profiles` → 201 shape (§4.1)                                                      | `app/api/routes/profiles.py`        | ✅     |
+| R21 | `GET /api/v1/profiles/{uuid}` + summary stats (§4.1)                                            | `app/api/routes/profiles.py`        | ✅     |
+| R22 | `POST /api/v1/profiles/{uuid}/run` full DAG + response fields (§4.2)                            | `app/api/routes/runs.py`            | ✅     |
+| R23 | `GET /api/v1/profiles/{uuid}/queries` filters+pagination+fields (§4.2)                          | `app/api/routes/queries.py`         | ✅     |
+| R24 | `GET /api/v1/profiles/{uuid}/recommendations` + fields (§4.2)                                   | `app/api/routes/recommendations.py` | ✅     |
+| R25 | `POST /api/v1/queries/{uuid}/recheck` partial re-run (§4.2)                                     | `app/api/routes/queries.py`         | ✅     |
 | R26 | Persistence: profiles/runs/queries/recommendations (§5)                                         | `app/db/models.py`                  | ✅     |
 | R27 | README (architecture, setup, agents, failures+example, observability+excerpt, limitations) (§5) | `README.md`                         | ☐      |
 | R28 | Tests: happy path, simulated failure+retry/fallback, tool-arg validation (§5)                   | `tests/`                            | ☐      |
@@ -675,11 +675,14 @@ and a **git commit** (clear history, §7/R30).
 - [x] Verified: black + ruff clean (57 files), mypy clean (48 files), **pytest 127 passed** (+8); keyless demo confirmed happy path + simulated-outage fallback (correlation-id on every log line, per-run metrics summary).
 - **Commit:** "feat(graph): LangGraph DAG with conditional routing + fallback". (R1, R2, R14)
 
-### Phase 8 — Services + API
+### Phase 8 — Services + API ✅
 
-- [ ] `services/*` (profile, pipeline, recheck).
-- [ ] `api/app.py`, `api/errors.py`, all `routes/*`, `schemas/*`.
-- [ ] `__main__.py` entrypoint; `make run` starts server; `/docs` works.
+- [x] `services/*` — `profile_service` (create, detail+summary, list queries, list recommendations), `pipeline_service` (`run_profile_pipeline`: load profile → run DAG outside any txn → persist run+queries+recs → return `RunResponse`), `recheck_service` (single-query re-run + update).
+- [x] `schemas/*` — Pydantic request/response contracts matching spec §4 field-for-field (`extra="forbid"` on inputs).
+- [x] `api/errors.py` — uniform error envelope + handlers (`APIError`/`NotFoundError` → status, validation → 422, unhandled → 500); `api/app.py` — DB-init lifespan, handlers, routers, `/health`; all `routes/*`.
+- [x] `__main__.py` entrypoint already boots the server; `/docs` works; all 6 `/api/v1` paths registered.
+- [x] Tests: `tests/test_api.py` (14 tests) — status codes (201/200/404/422), response shapes, opportunity-score sort, `min_score`/`status`/pagination filters, uniform error envelope, recheck update, empty-run edge case.
+- [x] Verified: black + ruff clean (70 files), mypy clean (60 files), **pytest 141 passed** (+14); live `python -m app` boot → `/health` 200, `/docs` 200, live `POST /run` → `completed`.
 - **Commit:** "feat(api): FastAPI endpoints + services wiring". (R20–R25)
 
 ### Phase 9 — Full test suite

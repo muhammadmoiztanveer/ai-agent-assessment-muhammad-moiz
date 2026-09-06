@@ -5,12 +5,13 @@ search engines and AI answers. It is built as an explicit **LangGraph DAG** of f
 (Planner → Retrieval → Extraction → Analysis → Report), exposed through a **FastAPI JSON API** with
 persistence, resilience, and observability.
 
-Built for the *AI Agent Engineer — Technical Assessment (v2.0)*.
+Built for the _AI Agent Engineer — Technical Assessment (v2.0)_.
 
-> **Build status:** foundation complete (Phase 0). Feature implementation (persistence → observability →
-> resilience → tools → LLM → agents → graph → API → tests) is in progress. See **[`STATUS.md`](./STATUS.md)**
-> for the live, phase-by-phase record of what is done and what remains. This README is expanded into the
-> full graded deliverable in Phase 10.
+> **Build status:** backend complete through Phase 8 — persistence, observability, resilience, DataForSEO
+> tools, LLM layer, the five atomic agents, the LangGraph DAG, and the full FastAPI service + endpoint
+> layer are all implemented and verified (141 tests green; live `POST /run` returns `completed` in mock
+> mode). Remaining: the dedicated Phase 9 test files, the expanded Phase 10 README, and the beyond-spec
+> Phase 11 frontend. See **[`STATUS.md`](./STATUS.md)** for the live, phase-by-phase record.
 
 ---
 
@@ -96,32 +97,32 @@ The full layered design, data model, and rationale live in **[`PLAN.md`](./PLAN.
 
 Each agent does exactly one job — combining them into "do-everything" agents is explicitly avoided.
 
-| Agent                        | Its one job                                                       |
-| ---------------------------- | ----------------------------------------------------------------- |
-| **Query Planner**            | Decide which searches / API calls are needed. (Never fetches.)    |
-| **Search / Retrieval Agent** | Execute planned tool calls against DataForSEO. (Never summarizes.)|
-| **Extraction / Normalization** | Turn raw API JSON into a clean schema. (Never scores.)          |
-| **Analysis / Synthesis**     | Reason over clean data → insights + scores. (Never formats output.)|
-| **Report Agent**             | Assemble final JSON + human summary. (Never calls tools.)         |
+| Agent                          | Its one job                                                         |
+| ------------------------------ | ------------------------------------------------------------------- |
+| **Query Planner**              | Decide which searches / API calls are needed. (Never fetches.)      |
+| **Search / Retrieval Agent**   | Execute planned tool calls against DataForSEO. (Never summarizes.)  |
+| **Extraction / Normalization** | Turn raw API JSON into a clean schema. (Never scores.)              |
+| **Analysis / Synthesis**       | Reason over clean data → insights + scores. (Never formats output.) |
+| **Report Agent**               | Assemble final JSON + human summary. (Never calls tools.)           |
 
 ---
 
 ## Tech stack
 
-| Concern         | Choice                                    |
-| --------------- | ----------------------------------------- |
-| Language        | Python 3.11+                              |
-| Orchestration   | LangGraph + LangChain                     |
-| LLM             | OpenAI via `langchain-openai`             |
-| API             | FastAPI + Uvicorn                         |
-| Validation      | Pydantic v2 / pydantic-settings           |
-| Persistence     | SQLAlchemy 2.0 + SQLite                   |
-| HTTP client     | httpx                                     |
-| Resilience      | tenacity + custom retry / circuit breaker |
-| Logging         | structlog (JSON)                          |
-| Testing         | pytest + pytest-asyncio + respx           |
-| Tooling         | ruff + black + mypy                       |
-| Frontend (extra)| React 19 + Vite 8 + TypeScript + Tailwind 4 |
+| Concern          | Choice                                      |
+| ---------------- | ------------------------------------------- |
+| Language         | Python 3.11+                                |
+| Orchestration    | LangGraph + LangChain                       |
+| LLM              | OpenAI via `langchain-openai`               |
+| API              | FastAPI + Uvicorn                           |
+| Validation       | Pydantic v2 / pydantic-settings             |
+| Persistence      | SQLAlchemy 2.0 + SQLite                     |
+| HTTP client      | httpx                                       |
+| Resilience       | tenacity + custom retry / circuit breaker   |
+| Logging          | structlog (JSON)                            |
+| Testing          | pytest + pytest-asyncio + respx             |
+| Tooling          | ruff + black + mypy                         |
+| Frontend (extra) | React 19 + Vite 8 + TypeScript + Tailwind 4 |
 
 ---
 
@@ -171,6 +172,7 @@ make run         # start the API at http://localhost:8000
 ```
 
 Then open:
+
 - Health probe: <http://localhost:8000/health>
 - Interactive API docs: <http://localhost:8000/docs>
 
@@ -206,7 +208,7 @@ DataForSEO credentials).
 
 The integration supports three modes via `DATAFORSEO_MODE`:
 
-- **`mock`** *(default)* — deterministic local fixtures modeled on real DataForSEO response envelopes.
+- **`mock`** _(default)_ — deterministic local fixtures modeled on real DataForSEO response envelopes.
   No network, no credentials; tests are hermetic.
 - **`live`** — calls the real DataForSEO API using Basic auth (`DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD`).
 - **`stub`** — minimal static stub responses.
@@ -239,17 +241,17 @@ Weights (default `0.4 / 0.3 / 0.3`) and the volume cap are configurable and must
 
 Base path: `/api/v1`. All responses are JSON; no authentication (out of scope).
 
-| Method | Path                                  | Purpose                                     |
-| ------ | ------------------------------------- | ------------------------------------------- |
-| POST   | `/profiles`                           | Register a brand/keyword profile            |
-| GET    | `/profiles/{profile_uuid}`            | Get a profile + summary stats               |
-| POST   | `/profiles/{profile_uuid}/run`        | Run the full DAG (core endpoint)            |
-| GET    | `/profiles/{profile_uuid}/queries`    | Discovered queries (filter/sort/paginate)   |
-| GET    | `/profiles/{profile_uuid}/recommendations` | Content recommendations                |
-| POST   | `/queries/{query_uuid}/recheck`       | Partial re-run for a single query           |
+| Method | Path                                       | Purpose                                   |
+| ------ | ------------------------------------------ | ----------------------------------------- |
+| POST   | `/profiles`                                | Register a brand/keyword profile          |
+| GET    | `/profiles/{profile_uuid}`                 | Get a profile + summary stats             |
+| POST   | `/profiles/{profile_uuid}/run`             | Run the full DAG (core endpoint)          |
+| GET    | `/profiles/{profile_uuid}/queries`         | Discovered queries (filter/sort/paginate) |
+| GET    | `/profiles/{profile_uuid}/recommendations` | Content recommendations                   |
+| POST   | `/queries/{query_uuid}/recheck`            | Partial re-run for a single query         |
 
-> These endpoints are being implemented across Phases 8–9 (see `STATUS.md`). The live, always-current
-> contract is available at `/docs` once the server is running.
+> All six endpoints are implemented and covered by contract tests (`tests/test_api.py`). The live,
+> always-current contract is available at `/docs` once the server is running.
 
 ---
 
@@ -291,9 +293,9 @@ over HTTP, so the backend remains runnable and gradable without it. See `fronten
 
 ## Documentation index
 
-| Doc                                        | Purpose                                        |
-| ------------------------------------------ | ---------------------------------------------- |
-| [`README.md`](./README.md)                 | This file — overview, setup, architecture      |
-| [`WHAT_TO_BUILD.md`](./WHAT_TO_BUILD.md)   | Plain-English scope of the assessment          |
-| [`PLAN.md`](./PLAN.md)                     | Detailed engineering plan + traceability matrix |
-| [`STATUS.md`](./STATUS.md)                 | Live build-status tracker                      |
+| Doc                                      | Purpose                                         |
+| ---------------------------------------- | ----------------------------------------------- |
+| [`README.md`](./README.md)               | This file — overview, setup, architecture       |
+| [`WHAT_TO_BUILD.md`](./WHAT_TO_BUILD.md) | Plain-English scope of the assessment           |
+| [`PLAN.md`](./PLAN.md)                   | Detailed engineering plan + traceability matrix |
+| [`STATUS.md`](./STATUS.md)               | Live build-status tracker                       |

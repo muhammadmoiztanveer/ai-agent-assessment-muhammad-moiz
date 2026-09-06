@@ -4,8 +4,8 @@
 > Companion docs: [`PLAN.md`](./PLAN.md) (engineering plan) · [`WHAT_TO_BUILD.md`](./WHAT_TO_BUILD.md) (plain-English scope).
 
 **Last updated:** 2026-09-06
-**Current phase:** Phase 8 — Services + API (next)
-**Overall progress:** Phases 0–7 of 11 complete (foundation + persistence + observability + resilience + DataForSEO tools + LLM layer + 5 atomic agents + LangGraph DAG ✅)
+**Current phase:** Phase 9 — Full test suite (next)
+**Overall progress:** Phases 0–8 of 11 complete (foundation + persistence + observability + resilience + DataForSEO tools + LLM layer + 5 atomic agents + LangGraph DAG + FastAPI services & endpoints ✅)
 
 Legend: ✅ done · 🔄 in progress · ☐ not started
 
@@ -106,12 +106,18 @@ Legend: ✅ done · 🔄 in progress · ☐ not started
 - [x] Verified: black + ruff clean (57 files), mypy clean (48 files), **pytest 127 passed** (+8); keyless demo confirmed happy path + simulated-outage fallback with correlation-id on every log line and a per-run metrics summary
 - [x] Commit: `feat(graph): LangGraph DAG with conditional routing + fallback`
 
-### ☐ Phase 8 — Services + API
+### ✅ Phase 8 — Services + API
 
-- [ ] `services/{profile_service,pipeline_service,recheck_service}.py`
-- [ ] `api/errors.py`, `api/deps.py`, `schemas/*`
-- [ ] `routes/{profiles,runs,queries,recommendations}.py`
-- [ ] Commit: `feat(api): FastAPI endpoints + services wiring`
+- [x] `schemas/{profile,query,recommendation,run}.py` — Pydantic request/response contracts (field-for-field per spec §4; `extra="forbid"` on inputs); `schemas/__init__.py` re-exports
+- [x] `api/errors.py` — `APIError`/`NotFoundError` + `install_error_handlers` (uniform `{"error": {code, message, details}}` envelope; maps domain errors → status, `RequestValidationError` → 422, unhandled → 500 without leaking traces)
+- [x] `services/profile_service.py` — `create_profile`, `get_profile_detail` (+ summary stats), `list_profile_queries` (filter/sort/paginate over the latest run), `list_profile_recommendations`; each owns a short `session_scope` and returns ready-to-serialize models
+- [x] `services/pipeline_service.py` — `run_profile_pipeline`: loads the profile (short txn) → runs the DAG **outside** any transaction (no connection held for the 10–30s run) → persists run + queries (from ranked insights) + recommendations (linked to their target query) in a final txn → returns the full `RunResponse`
+- [x] `services/recheck_service.py` — `recheck_query`: builds a single-keyword plan across all four tools, re-runs Retrieval → Extraction → Analysis, then updates the query's metrics and regenerates its recommendations
+- [x] `api/routes/{profiles,runs,queries,recommendations}.py` + `routes/__init__.py` (`all_routers`); the 6 endpoints under `/api/v1`
+- [x] `api/app.py` — lifespan initializes the DB (`init_db`), error handlers installed, routers included, `/health` + CORS retained
+- [x] API contract tests: `tests/test_api.py` (14 tests) — 201/200/404/422 codes, response shapes, opportunity-score sort, `min_score`/`status`/pagination filters, uniform error envelope, recheck update path, empty-run edge case
+- [x] Verified: black + ruff clean (70 files), mypy clean (60 files), **pytest 141 passed** (+14); live `python -m app` boot on a temp DB → `/health` 200, `/docs` 200, all 6 OpenAPI paths, live `POST /run` → `completed`; end-to-end TestClient flow (create → run → queries/recs/recheck) green
+- [x] Commit: `feat(api): FastAPI endpoints + services wiring`
 
 ### ☐ Phase 9 — Full test suite
 
@@ -167,12 +173,12 @@ Each row is done only when a file/test proves it.
 | R17 | Trace across run (correlation ID)                         | ✅     | `app/observability/tracing.py` + `tests/test_observability.py`                          |
 | R18 | Metrics: latency, success/fail, API call counts           | ✅     | `app/observability/metrics.py` + `tests/test_observability.py`                          |
 | R19 | README: production observability roadmap                  | ☐      | `README.md`                                                                             |
-| R20 | `POST /api/v1/profiles` → 201 shape                       | ☐      | `app/api/routes/profiles.py`                                                            |
-| R21 | `GET /api/v1/profiles/{uuid}` + summary stats             | ☐      | `app/api/routes/profiles.py`                                                            |
-| R22 | `POST /api/v1/profiles/{uuid}/run` full DAG               | ☐      | `app/api/routes/runs.py`                                                                |
-| R23 | `GET .../queries` filters + pagination + fields           | ☐      | `app/api/routes/queries.py`                                                             |
-| R24 | `GET .../recommendations` + fields                        | ☐      | `app/api/routes/recommendations.py`                                                     |
-| R25 | `POST /api/v1/queries/{uuid}/recheck` partial re-run      | ☐      | `app/api/routes/queries.py`                                                             |
+| R20 | `POST /api/v1/profiles` → 201 shape                       | ✅     | `app/api/routes/profiles.py` + `app/services/profile_service.py` + `tests/test_api.py`  |
+| R21 | `GET /api/v1/profiles/{uuid}` + summary stats             | ✅     | `app/api/routes/profiles.py` + `app/services/profile_service.py` + `tests/test_api.py`  |
+| R22 | `POST /api/v1/profiles/{uuid}/run` full DAG               | ✅     | `app/api/routes/runs.py` + `app/services/pipeline_service.py` + `tests/test_api.py`     |
+| R23 | `GET .../queries` filters + pagination + fields           | ✅     | `app/api/routes/queries.py` + `app/services/profile_service.py` + `tests/test_api.py`   |
+| R24 | `GET .../recommendations` + fields                        | ✅     | `app/api/routes/recommendations.py` + `app/services/profile_service.py` + `test_api.py` |
+| R25 | `POST /api/v1/queries/{uuid}/recheck` partial re-run      | ✅     | `app/api/routes/queries.py` + `app/services/recheck_service.py` + `tests/test_api.py`   |
 | R26 | Persistence: profiles/runs/queries/recommendations        | ✅     | `app/db/models.py` + `db/repositories.py` + `tests/test_persistence.py`                 |
 | R27 | README (architecture, setup, agents, failures, obs, ...)  | ☐      | `README.md`                                                                             |
 | R28 | Tests: happy, failure+retry/fallback, tool-arg validation | ☐      | `tests/`                                                                                |
@@ -181,27 +187,29 @@ Each row is done only when a file/test proves it.
 | R31 | opportunity_score formula documented                      | ✅     | `app/agents/analysis.py` (`opportunity_score`) + `tests/test_agents.py` + README        |
 | R32 | total tokens used surfaced                                | ✅     | `app/llm/base.py` (`total_tokens`) + `app/llm/client.py` + `tests/test_llm.py`          |
 
-**Done:** 21 / 32 (+1 in progress) — feature rows flip as Phases 8–10 land.
+**Done:** 27 / 32 (+1 in progress) — remaining rows (R3, R19, R27, R28, R30) flip as Phases 9–10 land.
 
 ---
 
-## Verification snapshot (through Phase 7)
+## Verification snapshot (through Phase 8)
 
-| Check             | Command                | Result                                                         |
-| ----------------- | ---------------------- | -------------------------------------------------------------- |
-| Lint              | `make lint`            | ✅ clean                                                       |
-| Format            | `black --check`        | ✅ clean (57 files)                                            |
-| Type-check        | `make typecheck`       | ✅ clean (48 files)                                            |
-| Tests             | `make test`            | ✅ 127 passed                                                  |
-| API boots         | `make run` → `/health` | ✅ 200 + `/docs`                                               |
-| DB schema         | `init_db()`            | ✅ 4 tables created                                            |
-| Observability     | JSON logs + redaction  | ✅ corr-id + secrets scrubbed                                  |
-| Resilience        | retry / classify / CB  | ✅ backoff+jitter, fast-fail, breaker trips                    |
-| DataForSEO tools  | mock / live / stub     | ✅ validate-before-call, retry+breaker, timeouts               |
-| LLM layer         | mock / openai / tokens | ✅ tool binding, token accounting, resilient retry             |
-| Agents (5 atomic) | chained keyless demo   | ✅ plan→retrieve→extract→analyze→report, per-agent JSON logs   |
-| Graph (DAG)       | `run_pipeline` demo    | ✅ completed / partial / failed routing, fallback, run metrics |
-| Frontend build    | `npm run build`        | ✅ compiles                                                    |
+| Check             | Command                     | Result                                                         |
+| ----------------- | --------------------------- | -------------------------------------------------------------- |
+| Lint              | `make lint`                 | ✅ clean                                                       |
+| Format            | `black --check`             | ✅ clean (70 files)                                            |
+| Type-check        | `make typecheck`            | ✅ clean (60 files)                                            |
+| Tests             | `make test`                 | ✅ 141 passed                                                  |
+| API boots         | `python -m app` → `/health` | ✅ 200 + `/docs` 200 + all 6 `/api/v1` paths in OpenAPI        |
+| API contracts     | `tests/test_api.py`         | ✅ 201/200/404/422, shapes, sort, filters, pagination, recheck |
+| DB schema         | `init_db()`                 | ✅ 4 tables created (lifespan + direct)                        |
+| Observability     | JSON logs + redaction       | ✅ corr-id + secrets scrubbed                                  |
+| Resilience        | retry / classify / CB       | ✅ backoff+jitter, fast-fail, breaker trips                    |
+| DataForSEO tools  | mock / live / stub          | ✅ validate-before-call, retry+breaker, timeouts               |
+| LLM layer         | mock / openai / tokens      | ✅ tool binding, token accounting, resilient retry             |
+| Agents (5 atomic) | chained keyless demo        | ✅ plan→retrieve→extract→analyze→report, per-agent JSON logs   |
+| Graph (DAG)       | `run_pipeline` demo         | ✅ completed / partial / failed routing, fallback, run metrics |
+| End-to-end run    | live `POST /run` (mock)     | ✅ `completed`, planned=7, extracted=4, sorted top insights    |
+| Frontend build    | `npm run build`             | ✅ compiles                                                    |
 
 ---
 
