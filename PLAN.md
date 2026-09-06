@@ -25,11 +25,11 @@ This is the master checklist. Nothing ships until every row is ✅. (Status fill
 | R8  | Graceful handling of malformed/partial tool args (§3.3)                                         | `app/tools/base.py`                 | ☐      |
 | R9  | DataForSEO integration w/ documented mode flag (§3.4)                                           | `app/integrations/dataforseo/`      | ☐      |
 | R10 | One tool per logical API call (§3.4)                                                            | `app/tools/dataforseo_tools.py`     | ☐      |
-| R11 | Retry w/ exponential backoff + jitter (§3.5)                                                    | `app/resilience/retry.py`           | ☐      |
-| R12 | Retryable vs non-retryable classification (§3.5)                                                | `app/resilience/errors.py`          | ☐      |
-| R13 | Sane timeouts on all external calls (§3.5)                                                      | HTTP client config                  | ☐      |
+| R11 | Retry w/ exponential backoff + jitter (§3.5)                                                    | `app/resilience/retry.py`           | ✅     |
+| R12 | Retryable vs non-retryable classification (§3.5)                                                | `app/resilience/errors.py`          | ✅     |
+| R13 | Sane timeouts on all external calls (§3.5)                                                      | HTTP client config                  | 🔄     |
 | R14 | Graceful degradation / partial results + error flag (§3.5)                                      | fallback node + state               | ☐      |
-| R15 | Circuit breaker (bonus) (§3.5)                                                                  | `app/resilience/circuit_breaker.py` | ☐      |
+| R15 | Circuit breaker (bonus) (§3.5)                                                                  | `app/resilience/circuit_breaker.py` | ✅     |
 | R16 | Structured JSON logs per node (inputs redacted, outputs, duration, success, retries) (§3.6)     | `app/observability/logging.py`      | ✅     |
 | R17 | Trace across run (correlation ID) (§3.6)                                                        | `app/observability/tracing.py`      | ✅     |
 | R18 | Metrics: latency, success/fail rate, API call counts (§3.6)                                     | `app/observability/metrics.py`      | ✅     |
@@ -630,11 +630,12 @@ and a **git commit** (clear history, §7/R30).
 - [x] Tests: redaction (+ over-redaction guard), correlation-id propagation, metrics aggregation (`tests/test_observability.py`).
 - **Commit:** "feat(obs): structured logging, correlation-id tracing, metrics collector". (R16–R18)
 
-### Phase 3 — Resilience core
+### Phase 3 — Resilience core ✅
 
-- [ ] `resilience/errors.py` (taxonomy + classify), `retry.py` (backoff+jitter), `circuit_breaker.py`.
-- [ ] Unit tests: classification + retry counting + breaker transitions.
-- **Commit:** "feat(resilience): retry/backoff/jitter, error classification, circuit breaker". (R11–R15)
+- [x] `resilience/errors.py` (taxonomy + classify), `retry.py` (backoff+jitter), `circuit_breaker.py`.
+- [x] Unit tests: classification + retry counting + breaker transitions (`tests/test_resilience.py`, 40 tests).
+- [x] Verified: ruff + black clean, mypy clean (27 files), pytest 56 passed.
+- **Commit:** "feat(resilience): retry/backoff/jitter, error classification, circuit breaker". (R11, R12, R15; R13 wired in Phase 4)
 
 ### Phase 4 — DataForSEO integration + tools
 

@@ -4,8 +4,8 @@
 > Companion docs: [`PLAN.md`](./PLAN.md) (engineering plan) · [`WHAT_TO_BUILD.md`](./WHAT_TO_BUILD.md) (plain-English scope).
 
 **Last updated:** 2026-09-06
-**Current phase:** Phase 3 — Resilience core (next)
-**Overall progress:** Phases 0–2 of 11 complete (foundation + persistence + observability ✅)
+**Current phase:** Phase 4 — DataForSEO integration + tools (next)
+**Overall progress:** Phases 0–3 of 11 complete (foundation + persistence + observability + resilience ✅)
 
 Legend: ✅ done · 🔄 in progress · ☐ not started
 
@@ -47,13 +47,15 @@ Legend: ✅ done · 🔄 in progress · ☐ not started
 - [x] Verified: black + ruff + mypy (24 files) clean, pytest 16 passed; live demo shows correlation_id on every line, secrets redacted, `total_tokens` preserved
 - [x] Commit: `feat(obs): structured logging, correlation-id tracing, metrics collector`
 
-### ☐ Phase 3 — Resilience core
+### ✅ Phase 3 — Resilience core
 
-- [ ] `resilience/errors.py` (retryable vs non-retryable taxonomy + `classify`)
-- [ ] `resilience/retry.py` (exponential backoff + jitter)
-- [ ] `resilience/circuit_breaker.py` (closed/open/half-open)
-- [ ] Unit tests: classification, retry counting, breaker transitions
-- [ ] Commit: `feat(resilience): retry/backoff/jitter, classification, breaker`
+- [x] `resilience/errors.py` — `ClassifiedError` (code, retryable, status_code, `retry_after_s`, redaction-safe detail, `as_dict`); `ResilienceError`/`RetryableError`/`NonRetryableError`; `classify()` mapping httpx transport errors + `Response`/`HTTPStatusError` + `ValueError` + unknown; `Retry-After` parsing (delta-seconds **and** HTTP-date, clamped ≥ 0); `is_retryable`, `to_resilience_error`
+- [x] `resilience/retry.py` — `RetryPolicy` (+ `from_settings`); `compute_delay` (exponential `base·2^(n-1)`, capped, **full jitter** `uniform(0, delay)`, `Retry-After` override still capped); `retry_call` (fast-fail on non-retryable, retries transient, exhausts → `RetryableError`, injectable `sleep`/`rng`, `on_retry` callback for metrics)
+- [x] `resilience/circuit_breaker.py` — `CircuitState` (closed/open/half-open); `CircuitOpenError` (non-retryable); thread-safe `CircuitBreaker` (injectable clock, `allow`/`record_success`/`record_failure`/`call`, half-open trial, `record_failure_on` predicate, `from_settings`)
+- [x] `resilience/__init__.py` re-exports
+- [x] Unit tests: `tests/test_resilience.py` (40 tests) — classification of all status classes + transport errors, `Retry-After` (int + date), backoff growth/cap/jitter-bounds/override, retry counting, fast-fail, exhaustion, breaker open→cooldown→half-open→close/reopen, `call` wrapper + failure predicate
+- [x] Verified: ruff + black clean, mypy clean (27 files), **pytest 56 passed**; live demo confirmed backoff `[0.5, 1.0]`, non-retryable fast-fail, breaker trips → `open`, 429 (retryable + `Retry-After=5.0`) vs 401 (non-retryable)
+- [x] Commit: `feat(resilience): retry/backoff/jitter, classification, breaker`
 
 ### ☐ Phase 4 — DataForSEO integration + tools
 
@@ -141,11 +143,11 @@ Each row is done only when a file/test proves it.
 | R8  | Graceful handling of malformed/partial tool args          | ☐      | `app/tools/base.py`                                                     |
 | R9  | DataForSEO integration w/ documented mode flag            | ☐      | `app/integrations/dataforseo/`                                          |
 | R10 | One tool per logical API call                             | ☐      | `app/tools/dataforseo_tools.py`                                         |
-| R11 | Retry w/ exponential backoff + jitter                     | ☐      | `app/resilience/retry.py`                                               |
-| R12 | Retryable vs non-retryable classification                 | ☐      | `app/resilience/errors.py`                                              |
-| R13 | Sane timeouts on all external calls                       | ☐      | HTTP client config                                                      |
+| R11 | Retry w/ exponential backoff + jitter                     | ✅     | `app/resilience/retry.py` + `tests/test_resilience.py`                  |
+| R12 | Retryable vs non-retryable classification                 | ✅     | `app/resilience/errors.py` + `tests/test_resilience.py`                 |
+| R13 | Sane timeouts on all external calls                       | 🔄     | config in `app/config.py` (wired into httpx client in Phase 4)          |
 | R14 | Graceful degradation / partial results + error flag       | ☐      | fallback node + state                                                   |
-| R15 | Circuit breaker (bonus)                                   | ☐      | `app/resilience/circuit_breaker.py`                                     |
+| R15 | Circuit breaker (bonus)                                   | ✅     | `app/resilience/circuit_breaker.py` + `tests/test_resilience.py`        |
 | R16 | Structured JSON logs per node                             | ✅     | `app/observability/logging.py` + `tests/test_observability.py`          |
 | R17 | Trace across run (correlation ID)                         | ✅     | `app/observability/tracing.py` + `tests/test_observability.py`          |
 | R18 | Metrics: latency, success/fail, API call counts           | ✅     | `app/observability/metrics.py` + `tests/test_observability.py`          |
@@ -164,22 +166,23 @@ Each row is done only when a file/test proves it.
 | R31 | opportunity_score formula documented                      | ☐      | `app/agents/analysis.py` + README                                       |
 | R32 | total tokens used surfaced                                | ☐      | token callback in LLM client                                            |
 
-**Done:** 5 / 32 (+1 in progress) — feature rows flip as Phases 3–10 land.
+**Done:** 8 / 32 (+2 in progress) — feature rows flip as Phases 4–10 land.
 
 ---
 
-## Verification snapshot (through Phase 2)
+## Verification snapshot (through Phase 3)
 
-| Check          | Command                | Result                        |
-| -------------- | ---------------------- | ----------------------------- |
-| Lint           | `make lint`            | ✅ clean                      |
-| Format         | `black --check`        | ✅ clean (28 files)           |
-| Type-check     | `make typecheck`       | ✅ clean (24 files)           |
-| Tests          | `make test`            | ✅ 16 passed                  |
-| API boots      | `make run` → `/health` | ✅ 200 + `/docs`              |
-| DB schema      | `init_db()`            | ✅ 4 tables created           |
-| Observability  | JSON logs + redaction  | ✅ corr-id + secrets scrubbed |
-| Frontend build | `npm run build`        | ✅ compiles                   |
+| Check          | Command                | Result                                      |
+| -------------- | ---------------------- | ------------------------------------------- |
+| Lint           | `make lint`            | ✅ clean                                    |
+| Format         | `black --check`        | ✅ clean (32 files)                         |
+| Type-check     | `make typecheck`       | ✅ clean (27 files)                         |
+| Tests          | `make test`            | ✅ 56 passed                                |
+| API boots      | `make run` → `/health` | ✅ 200 + `/docs`                            |
+| DB schema      | `init_db()`            | ✅ 4 tables created                         |
+| Observability  | JSON logs + redaction  | ✅ corr-id + secrets scrubbed               |
+| Resilience     | retry / classify / CB  | ✅ backoff+jitter, fast-fail, breaker trips |
+| Frontend build | `npm run build`        | ✅ compiles                                 |
 
 ---
 
