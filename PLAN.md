@@ -15,8 +15,8 @@ This is the master checklist. Nothing ships until every row is ✅. (Status fill
 
 | #   | Spec requirement (section)                                                                      | Where it's satisfied                | Status |
 | --- | ----------------------------------------------------------------------------------------------- | ----------------------------------- | ------ |
-| R1  | Explicit DAG via LangGraph, named nodes/edges (§3.1)                                            | `app/graph/build.py`                | ☐      |
-| R2  | Conditional routing + fallback path (§3.1)                                                      | `app/graph/edges.py`                | ☐      |
+| R1  | Explicit DAG via LangGraph, named nodes/edges (§3.1)                                            | `app/graph/build.py`                | ✅     |
+| R2  | Conditional routing + fallback path (§3.1)                                                      | `app/graph/edges.py`                | ✅     |
 | R3  | DAG diagram in README (§3.1)                                                                    | `README.md` (Mermaid)               | ☐      |
 | R4  | 5 atomic single-responsibility agents (§3.2)                                                    | `app/agents/*.py`                   | ✅     |
 | R5  | No agent does two jobs (§3.2)                                                                   | Typed contracts + per-agent tests   | ✅     |
@@ -28,7 +28,7 @@ This is the master checklist. Nothing ships until every row is ✅. (Status fill
 | R11 | Retry w/ exponential backoff + jitter (§3.5)                                                    | `app/resilience/retry.py`           | ✅     |
 | R12 | Retryable vs non-retryable classification (§3.5)                                                | `app/resilience/errors.py`          | ✅     |
 | R13 | Sane timeouts on all external calls (§3.5)                                                      | HTTP client config                  | ✅     |
-| R14 | Graceful degradation / partial results + error flag (§3.5)                                      | fallback node + state               | ☐      |
+| R14 | Graceful degradation / partial results + error flag (§3.5)                                      | fallback node + state               | ✅     |
 | R15 | Circuit breaker (bonus) (§3.5)                                                                  | `app/resilience/circuit_breaker.py` | ✅     |
 | R16 | Structured JSON logs per node (inputs redacted, outputs, duration, success, retries) (§3.6)     | `app/observability/logging.py`      | ✅     |
 | R17 | Trace across run (correlation ID) (§3.6)                                                        | `app/observability/tracing.py`      | ✅     |
@@ -664,10 +664,15 @@ and a **git commit** (clear history, §7/R30).
 - [x] Verified: black + ruff clean (51 files), mypy clean (43 files), **pytest 119 passed** (+17); chained keyless demo confirmed plan→retrieve→extract→analyze→report.
 - **Commit:** "feat(agents): 5 atomic single-responsibility agents". (R4, R5, R31)
 
-### Phase 7 — Graph assembly
+### Phase 7 — Graph assembly ✅
 
-- [ ] `graph/state.py`, `graph/nodes.py` (wrap agents + tracing/metrics), `graph/edges.py` (conditional + fallback), `graph/build.py` (compile StateGraph).
-- [ ] Integration test: happy path end-to-end on mocks.
+- [x] `graph/state.py` — typed `PipelineState` (TypedDict) + node-name constants + `initial_state`; each node writes only its own slice (atomicity preserved through the graph).
+- [x] `graph/dependencies.py` — `PipelineDependencies` + `build_dependencies` (wires client → tools → LLM → the 5 agents per run; token-usage callback feeds the run metrics).
+- [x] `graph/nodes.py` — instrumented node wrappers (timing + `RunMetrics` + structured `graph.node.finish` logs); a failing node is classified and degrades to fallback instead of crashing.
+- [x] `graph/edges.py` — conditional routers (`route_after_plan`/`route_after_retrieve`/`route_after_normalize`), each guarding the fallback branch.
+- [x] `graph/build.py` — `build_graph` compiles the `StateGraph` (START→plan→retrieve→normalize→analyze→report; fallback path; conditional edges); `run_pipeline` binds correlation-id + metrics and returns the final state.
+- [x] Integration tests: `tests/test_graph.py` (8 tests) — happy path → `completed` with full response + one metric per node; total retrieval failure → `failed` with report (no crash, breaker trips); partial retrieval failure → `partial`; conditional routers; compiled-graph node names.
+- [x] Verified: black + ruff clean (57 files), mypy clean (48 files), **pytest 127 passed** (+8); keyless demo confirmed happy path + simulated-outage fallback (correlation-id on every log line, per-run metrics summary).
 - **Commit:** "feat(graph): LangGraph DAG with conditional routing + fallback". (R1, R2, R14)
 
 ### Phase 8 — Services + API
