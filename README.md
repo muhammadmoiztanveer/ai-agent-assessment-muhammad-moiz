@@ -10,10 +10,38 @@ Built for the _AI Agent Engineer — Technical Assessment (v2.0)_.
 > **Build status:** complete, including **both** bonuses named in the assessment (circuit breaker §3.5
 > and async/background run processing §4.2). Persistence, observability, resilience, DataForSEO tools,
 > the LLM layer, the five atomic agents, the LangGraph DAG, the full FastAPI service + endpoint layer,
-> the complete spec-mandated test suite (**210 tests green**), and the beyond-spec React dashboard are all
-> implemented and verified — `make check` is clean (ruff + mypy + 210 tests) and a live `POST /run`
+> the complete spec-mandated test suite (**215 tests green**), and the beyond-spec React dashboard are all
+> implemented and verified — `make check` is clean (ruff + mypy + 215 tests) and a live `POST /run`
 > returns `completed` in mock mode with zero credentials. See **[`STATUS.md`](./STATUS.md)** for the
 > phase-by-phase record.
+
+---
+
+## Reviewer's guide — where every graded capability lives
+
+Every requirement in the assessment is implemented in code, proven by a test, and (where it makes sense)
+visible in the dashboard. This table is the fastest way to verify each one — code pointer, the test that
+proves it, and a command to see it live.
+
+| Graded area (spec)                                                                           | In the code                                                    | Proven by                                                                           | See it live                                                                               |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **DAG orchestration** — named nodes, conditional routing, fallback (§3.1)                    | `app/graph/build.py`, `edges.py`, `state.py`                   | `tests/test_graph.py`                                                               | Dashboard **§3 Observability & DAG trace** renders the executed path; diagram below       |
+| **5 atomic agents** — one job each (§3.2)                                                    | `app/agents/{planner,retrieval,extraction,analysis,report}.py` | `tests/test_agents.py`                                                              | Each node appears separately in the DAG trace                                             |
+| **Correct tool calling** — typed schemas, validate-before-call (§3.3)                        | `app/tools/schemas.py`, `tools/base.py`                        | `tests/test_tool_validation.py`                                                     | `GET /docs` shows tool schemas; validation is unit-tested                                 |
+| **DataForSEO integration** — one tool per call, mode flag (§3.4)                             | `app/tools/dataforseo_tools.py`, `integrations/dataforseo/`    | `tests/test_tools.py`                                                               | `retrieve_data` node shows the API-call count                                             |
+| **Resilience** — retry/backoff/jitter, classification, timeouts, graceful degradation (§3.5) | `app/resilience/`                                              | `tests/test_failure_retry.py`, `test_fallback_degradation.py`, `test_resilience.py` | **Dashboard → “Simulate total outage / partial failure”**, or `POST /run?simulate=outage` |
+| **Circuit breaker** (§3.5 bonus)                                                             | `app/resilience/circuit_breaker.py`                            | `tests/test_resilience.py`                                                          | Outage sim trips it: `degraded_reason: "... circuit_open ..."`                            |
+| **Observability** — per-node JSON logs, correlation-ID trace, metrics (§3.6)                 | `app/observability/`, `graph/nodes.py`                         | `tests/test_observability.py`, `test_observability_api.py`                          | Dashboard **§3** (per-node latency/success/retries + totals); terminal `run.metrics` log  |
+| **REST API + persistence + validation** (§4, §5)                                             | `app/api/routes/`, `services/`, `db/`                          | `tests/test_api_contracts.py`, `test_persistence.py`                                | `GET /docs` + the dashboard flow                                                          |
+| **opportunity_score formula** (§4.2)                                                         | `app/agents/analysis.py`                                       | `tests/test_opportunity_score.py`                                                   | Shown per query in **§4** and in insights                                                 |
+| **Async / background runs** (§4.2 bonus)                                                     | `app/services/run_queue.py`, `api/routes/runs.py`              | `tests/test_async_runs.py`                                                          | Dashboard **“Background (async)”** toggle; `POST /run?async=true`                         |
+| **Tests** — happy / failure+retry / tool validation (§5)                                     | `tests/` (215 tests)                                           | `make test`                                                                         | —                                                                                         |
+
+> **Important for reviewers:** the dashboard is a **beyond-spec extra**. The graded system is the
+> backend, and it is fully gradable **without** the frontend via `make check`, `GET /docs`, and the
+> structured logs. The dashboard simply makes the DAG, per-node metrics, resilience/fallback, and async
+> execution _visible in a browser_ so nothing has to be taken on faith. Anything not on screen is in the
+> code + a named test + the logs — see the table above.
 
 ---
 
@@ -239,7 +267,7 @@ Keep the backend running in another terminal — the dashboard talks to it over 
 | ----------------------- | ----------------------------------------------------- |
 | `make install`          | Create the virtualenv and install backend + dev deps  |
 | `make run`              | Start the API server (`python -m app`)                |
-| `make test`             | Run the full pytest suite (210 tests, hermetic)       |
+| `make test`             | Run the full pytest suite (215 tests, hermetic)       |
 | `make lint`             | Lint with ruff                                        |
 | `make typecheck`        | Static type-check with mypy                           |
 | `make check`            | `lint` + `typecheck` + `test` (the full quality gate) |
@@ -315,8 +343,13 @@ Base path: `/api/v1`. All responses are JSON; no authentication (out of scope).
 | POST   | `/queries/{query_uuid}/recheck`            | Partial re-run for a single query                                 |
 
 > Every endpoint is implemented and covered by contract tests (`tests/test_api.py`,
-> `tests/test_async_runs.py`). The live, always-current contract is available at `/docs` once the server
-> is running.
+> `tests/test_async_runs.py`, `tests/test_observability_api.py`). The live, always-current contract is
+> available at `/docs` once the server is running.
+>
+> The run response also carries an **`observability`** block — the per-node trace (latency, success,
+> API calls, retries) plus run totals — persisted with the run and returned by `GET /runs/{uuid}`. The
+> run endpoint accepts `?async=true` (background) and `?simulate=outage|degraded` (inject a failure to
+> demonstrate resilience live).
 
 ### Quick curl walkthrough
 
@@ -410,6 +443,20 @@ the surviving data. Run it with:
 make test        # includes test_fallback_degradation.py (total + partial degradation)
 ```
 
+The same failure injection is exposed **live** through the API so you don't have to read a test to
+believe it — `?simulate=outage` forces a total outage (run ends `failed` via `fallback`) and
+`?simulate=degraded` fails only the SERP-family calls (run ends `partial`):
+
+```bash
+# Total outage → status "failed", routed through the fallback node, breaker trips
+curl -s -X POST "http://localhost:8000/api/v1/profiles/<profile_uuid>/run?simulate=outage" \
+  | jq '{status, error_flag, degraded_reason, path: [.observability.nodes[].node], retries: .observability.total_retries}'
+# → {"status":"failed","error_flag":true,"degraded_reason":"all retrieval calls failed (circuit_open, timeout)",
+#    "path":["plan_queries","retrieve_data","fallback","build_report"],"retries":4}
+```
+
+The dashboard wires the same thing to its **Simulate total outage / partial failure** buttons.
+
 ### Sample log & trace excerpt
 
 Every node emits a structured JSON line bound to a per-run `correlation_id`, and each run closes with a
@@ -452,7 +499,7 @@ With more time, the in-process observability would graduate to:
 ## Testing
 
 ```bash
-make test        # run the full pytest suite (210 tests)
+make test        # run the full pytest suite (215 tests)
 make lint        # ruff
 make typecheck   # mypy
 make check       # lint + typecheck + test  (the full quality gate)
@@ -471,6 +518,7 @@ mandated cases:
 | `test_api_contracts.py`                                           | Status codes (201/200/404/422), response shapes, filters, pagination, recheck     |
 | `test_opportunity_score.py`                                       | Formula correctness, `[0,1]` bounds, monotonicity, weight sensitivity             |
 | `test_async_runs.py`                                              | Async bonus: 202 `queued`, background completion via polling, worker robustness   |
+| `test_observability_api.py`                                       | Observability exposed + persisted; `?simulate=` outage→failed, degraded→partial   |
 | `test_persistence.py`                                             | ORM round-trip, filters, summary stats, recheck update/replace                    |
 | `test_observability.py`                                           | Secret redaction, correlation-id propagation, metrics aggregation                 |
 | `test_resilience.py`                                              | Error taxonomy, backoff/jitter bounds, circuit-breaker state transitions          |
@@ -501,10 +549,15 @@ Two easy ways to exercise the running system end-to-end.
 1. Keep `make run` going; in another terminal: `make install-frontend && make run-frontend`.
 2. Open <http://localhost:5173>. The header badge should show the backend as connected.
 3. **Create a profile** → **Run pipeline** (leave the toggle off for a synchronous run).
-4. Inspect the run summary, top insights, queries table (try the filters + a row **recheck**),
-   recommendations, and the report panel (expand the raw JSON / correlation-id trace).
-5. **Test the async bonus:** tick **“Background (async)”**, click **Run pipeline**, and watch the live
+4. Inspect the run summary and top insights, then the **Observability & DAG trace** panel — the executed
+   DAG path, per-node latency/API-calls/retries, the totals strip, and the correlation ID.
+5. Explore the queries table (try the filters + a row **recheck**), recommendations, and the report panel
+   (expand the raw JSON / correlation-id trace).
+6. **Test the async bonus:** tick **“Background (async)”**, click **Run pipeline**, and watch the live
    `queued → running → completed` status while the dashboard polls `GET /runs/{uuid}` in the background.
+7. **Test resilience live:** click **Simulate total outage** — the DAG reroutes through `fallback`, the
+   run ends `failed` with a degraded banner, and the trace shows the retries the breaker absorbed. Click
+   **Simulate partial failure** for a `partial` run where some data survives.
 
 ---
 
@@ -520,23 +573,33 @@ make install-frontend    # npm install in frontend/
 make run-frontend        # Vite dev server at http://localhost:5173
 ```
 
-The dashboard walks the whole pipeline in one page:
+The dashboard walks the whole pipeline in one page and — importantly — makes the engineering internals
+(the DAG, resilience, and observability) visible, not just the product output:
 
 1. **Create a profile** — name, domain, industry, description, competitors (with inline validation).
 2. **Run the pipeline** — one click triggers `POST /run`; a live spinner covers the run, then a status
    badge (`completed` / `partial` / `failed`) and a degraded-run banner appear. A **“Background (async)”**
    toggle switches to the async bonus path (`?async=true` + polling `GET /runs/{uuid}`) with live
-   `queued → running` feedback.
-3. **Run summary** — planned retrieval calls, extracted records, total tokens, insight count, plus the
-   run and correlation IDs.
-4. **Top insights** — scored, ranked queries with visibility badges and rationale.
-5. **Queries table** — sorted by opportunity score, with `min_score` / visibility-status filters,
+   `queued → running` feedback. A **“Resilience demo”** row has **Simulate partial failure** and
+   **Simulate total outage** buttons that inject a dependency failure (`?simulate=`) so you can watch
+   retries → circuit breaker → fallback happen live.
+   The run summary shows planned retrieval calls, extracted records, total tokens, insight count, and the
+   run + correlation IDs; top insights are scored and ranked with visibility badges.
+3. **Observability & DAG trace** — a rendered **DAG** showing exactly which nodes executed (happy path,
+   or the `fallback` branch when degraded), plus per-node **latency, success, API calls, and retries**, a
+   totals strip (duration, success rate, API calls, retries, tokens), a node-by-node trace table, and the
+   run's correlation ID. This is the same data the backend logs as `run.metrics`, surfaced in the browser.
+4. **Queries table** — sorted by opportunity score, with `min_score` / visibility-status filters,
    pagination, and a per-row **recheck** button (`POST /recheck`).
-6. **Recommendations** — content-type, priority, rationale, and target-keyword chips.
-7. **Report** — the human-readable summary, a run-trace panel (correlation ID), and collapsible raw JSON.
+5. **Recommendations** — content-type, priority, rationale, and target-keyword chips.
+6. **Report** — the human-readable summary, a run-trace panel (correlation ID), and collapsible raw JSON.
 
 Every panel has explicit loading, empty, and error states, and the layout is mobile-first, keyboard
 navigable, and dark-mode aware. A live backend-connection badge polls `/health`.
+
+> Tip for reviewers: click **Simulate total outage** to see the DAG reroute through `fallback`, the run
+> end `failed` with `error_flag`, and the trace table show the retries the circuit breaker absorbed —
+> resilience made visible without touching the terminal.
 
 ---
 

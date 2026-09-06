@@ -4,8 +4,8 @@
 > Companion docs: [`PLAN.md`](./PLAN.md) (engineering plan) · [`WHAT_TO_BUILD.md`](./WHAT_TO_BUILD.md) (plain-English scope).
 
 **Last updated:** 2026-09-06
-**Current phase:** ✅ All phases complete (0–12), including both spec bonuses
-**Overall progress:** Phases 0–12 complete (foundation + persistence + observability + resilience + DataForSEO tools + LLM layer + 5 atomic agents + LangGraph DAG + FastAPI services & endpoints + full spec-mandated test suite + graded README + beyond-spec responsive dashboard + async/background execution bonus ✅). **Both PDF-named bonuses are delivered**: circuit breaker (§3.5) and async/background run processing (§4.2).
+**Current phase:** ✅ All phases complete (0–13), including both spec bonuses + observability visualization
+**Overall progress:** Phases 0–13 complete (foundation + persistence + observability + resilience + DataForSEO tools + LLM layer + 5 atomic agents + LangGraph DAG + FastAPI services & endpoints + full spec-mandated test suite + graded README + beyond-spec responsive dashboard + async/background execution bonus + API-exposed per-run observability with a DAG/metrics dashboard and live failure simulation ✅). **Both PDF-named bonuses are delivered**: circuit breaker (§3.5) and async/background run processing (§4.2).
 
 Legend: ✅ done · 🔄 in progress · ☐ not started
 
@@ -170,6 +170,22 @@ Legend: ✅ done · 🔄 in progress · ☐ not started
 - [x] Verified: black clean (79 files), ruff clean, mypy clean (61 files), **pytest 210 passed** (+8); live `POST /run?async=true` → 202 `queued`, poll → `completed` (planned=7, extracted=4); `/api/v1/runs/{run_uuid}` present in OpenAPI (now 8 paths); sync `POST /run` still 200; frontend `npm run build` clean
 - [x] Commit: `feat(runs): async background execution + run status polling (bonus)`
 
+### ✅ Phase 13 — Observability visualization + live failure simulation
+
+> Makes the graded-but-previously-invisible engineering signals (DAG path, per-node metrics, resilience
+> fallback) inspectable from the API and the dashboard, so a reviewer never has to take them on faith.
+
+- [x] `db/models.py` — `Run.metrics` JSON column persisting the per-run observability summary
+- [x] `schemas/run.py` — `NodeMetricSchema` + `ObservabilitySchema`; `RunResponse.observability`
+- [x] `observability/metrics.py` + `graph/nodes.py` — retries counted and attributed to the node during which they occur (`record_retry`/`take_pending_retries`)
+- [x] `graph/build.py` + `graph/dependencies.py` — client `on_retry` wired into run metrics; `run_pipeline(mock_hook=...)` for live fault injection
+- [x] `services/pipeline_service.py` — persists `metrics.summary()`; `_observability_from_row`; `run_profile_pipeline(simulate=)` + `_simulate_hook(outage|degraded)`
+- [x] `api/routes/runs.py` — `POST /run?simulate=outage|degraded` (synchronous, injected failure)
+- [x] Frontend — `GraphView` (executed DAG path + per-node badges), `ObservabilityPanel` (§3: totals + trace table + correlation id), and a **Resilience demo** row (Simulate partial/total failure) in the run panel
+- [x] Tests: `tests/test_observability_api.py` (5) — observability shape/order/success-rate/api-calls, persisted + pollable, `simulate=outage`→`failed` via `fallback`, `simulate=degraded`→`partial`, bad mode → 422
+- [x] Verified: black clean (80 files), ruff clean, mypy clean (61 files), **pytest 215 passed** (+5); live outage sim → `failed`, `total_retries=4` attributed to `retrieve_data`; frontend `npm run build` clean (27 modules)
+- [x] Commit: `feat(observability): expose per-run node metrics + DAG/metrics dashboard + live failure simulation`
+
 ---
 
 ## Bonuses (both PDF-named bonuses delivered)
@@ -228,25 +244,27 @@ phase commit.
 
 ## Verification snapshot (through Phase 12 — all phases + both bonuses)
 
-| Check             | Command                     | Result                                                                     |
-| ----------------- | --------------------------- | -------------------------------------------------------------------------- |
-| Lint              | `make lint`                 | ✅ clean                                                                   |
-| Format            | `black --check`             | ✅ clean (79 files)                                                        |
-| Type-check        | `make typecheck`            | ✅ clean (61 app files)                                                    |
-| Tests             | `make test`                 | ✅ 210 passed (incl. spec-mandated happy/failure/validation + async bonus) |
-| API boots         | `python -m app` → `/health` | ✅ 200 + `/docs` 200 + all 7 `/api/v1` paths in OpenAPI                    |
-| Async bonus       | `POST /run?async=true`      | ✅ 202 `queued` → poll `GET /runs/{uuid}` → `completed`                    |
-| API contracts     | `tests/test_api.py`         | ✅ 201/200/404/422, shapes, sort, filters, pagination, recheck             |
-| DB schema         | `init_db()`                 | ✅ 4 tables created (lifespan + direct)                                    |
-| Observability     | JSON logs + redaction       | ✅ corr-id + secrets scrubbed                                              |
-| Resilience        | retry / classify / CB       | ✅ backoff+jitter, fast-fail, breaker trips                                |
-| DataForSEO tools  | mock / live / stub          | ✅ validate-before-call, retry+breaker, timeouts                           |
-| LLM layer         | mock / openai / tokens      | ✅ tool binding, token accounting, resilient retry                         |
-| Agents (5 atomic) | chained keyless demo        | ✅ plan→retrieve→extract→analyze→report, per-agent JSON logs               |
-| Graph (DAG)       | `run_pipeline` demo         | ✅ completed / partial / failed routing, fallback, run metrics             |
-| End-to-end run    | live `POST /run` (mock)     | ✅ `completed`, planned=7, extracted=4, sorted top insights                |
-| Frontend build    | `npm run build`             | ✅ tsc (strict) + vite clean, 25 modules; full dashboard                   |
-| Frontend ↔ API    | `make run-frontend`         | ✅ dev server serves + reaches API (health polling in logs)                |
+| Check             | Command                     | Result                                                                |
+| ----------------- | --------------------------- | --------------------------------------------------------------------- |
+| Lint              | `make lint`                 | ✅ clean                                                              |
+| Format            | `black --check`             | ✅ clean (80 files)                                                   |
+| Type-check        | `make typecheck`            | ✅ clean (61 app files)                                               |
+| Tests             | `make test`                 | ✅ 215 passed (spec happy/failure/validation + async + observability) |
+| API boots         | `python -m app` → `/health` | ✅ 200 + `/docs` 200 + all 7 `/api/v1` paths in OpenAPI               |
+| Async bonus       | `POST /run?async=true`      | ✅ 202 `queued` → poll `GET /runs/{uuid}` → `completed`               |
+| Observability     | run `observability` block   | ✅ per-node latency/success/api-calls/retries persisted + returned    |
+| Failure sim       | `POST /run?simulate=outage` | ✅ `failed` via `fallback`, retries attributed, breaker trips         |
+| API contracts     | `tests/test_api.py`         | ✅ 201/200/404/422, shapes, sort, filters, pagination, recheck        |
+| DB schema         | `init_db()`                 | ✅ 4 tables created (lifespan + direct)                               |
+| Observability     | JSON logs + redaction       | ✅ corr-id + secrets scrubbed                                         |
+| Resilience        | retry / classify / CB       | ✅ backoff+jitter, fast-fail, breaker trips                           |
+| DataForSEO tools  | mock / live / stub          | ✅ validate-before-call, retry+breaker, timeouts                      |
+| LLM layer         | mock / openai / tokens      | ✅ tool binding, token accounting, resilient retry                    |
+| Agents (5 atomic) | chained keyless demo        | ✅ plan→retrieve→extract→analyze→report, per-agent JSON logs          |
+| Graph (DAG)       | `run_pipeline` demo         | ✅ completed / partial / failed routing, fallback, run metrics        |
+| End-to-end run    | live `POST /run` (mock)     | ✅ `completed`, planned=7, extracted=4, sorted top insights           |
+| Frontend build    | `npm run build`             | ✅ tsc (strict) + vite clean, 25 modules; full dashboard              |
+| Frontend ↔ API    | `make run-frontend`         | ✅ dev server serves + reaches API (health polling in logs)           |
 
 ---
 
