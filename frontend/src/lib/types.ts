@@ -5,7 +5,12 @@
  * dashboard consumes exactly what the API returns — nothing more, nothing less.
  */
 
-export type RunStatus = "completed" | "partial" | "failed" | "running";
+export type RunStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "partial"
+  | "failed";
 export type VisibilityStatus = "visible" | "not_visible" | "unknown";
 export type ContentType = "blog_post" | "landing_page" | "faq";
 export type Priority = "high" | "medium" | "low";

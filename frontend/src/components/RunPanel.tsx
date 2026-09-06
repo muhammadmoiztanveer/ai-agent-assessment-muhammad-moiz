@@ -1,6 +1,10 @@
 /** Active profile header, pipeline run trigger, live status, and run summary. */
 
-import type { Insight, ProfileCreatedResponse, RunResponse } from "../lib/types";
+import type {
+  Insight,
+  ProfileCreatedResponse,
+  RunResponse,
+} from "../lib/types";
 import {
   formatInt,
   formatScore,
@@ -16,6 +20,8 @@ export function RunPanel({
   run,
   running,
   error,
+  asyncMode,
+  onAsyncModeChange,
   onRun,
   onReset,
 }: {
@@ -23,6 +29,8 @@ export function RunPanel({
   run: RunResponse | null;
   running: boolean;
   error: string | null;
+  asyncMode: boolean;
+  onAsyncModeChange: (value: boolean) => void;
   onRun: () => void;
   onReset: () => void;
 }) {
@@ -31,23 +39,41 @@ export function RunPanel({
       title="2 · Run the pipeline"
       description="Executes the full LangGraph DAG: Planner → Retrieval → Extraction → Analysis → Report."
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 rounded border-slate-300 text-sky-600 focus:ring-sky-500 dark:border-slate-600 dark:bg-slate-800"
+              checked={asyncMode}
+              disabled={running}
+              onChange={(event) => onAsyncModeChange(event.target.checked)}
+            />
+            Background (async)
+          </label>
           <Button variant="ghost" onClick={onReset}>
             New profile
           </Button>
           <Button onClick={onRun} busy={running}>
-            {running ? "Running…" : run ? "Run again" : "Run pipeline"}
+            {running
+              ? asyncMode
+                ? "Working…"
+                : "Running…"
+              : run
+                ? "Run again"
+                : "Run pipeline"}
           </Button>
         </div>
       }
     >
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-          <span className="font-semibold text-slate-900 dark:text-slate-100">{profile.name}</span>
-          <span className="text-slate-500 dark:text-slate-400">{profile.domain}</span>
-          {profile.industry && (
-            <Badge tone="violet">{profile.industry}</Badge>
-          )}
+          <span className="font-semibold text-slate-900 dark:text-slate-100">
+            {profile.name}
+          </span>
+          <span className="text-slate-500 dark:text-slate-400">
+            {profile.domain}
+          </span>
+          {profile.industry && <Badge tone="violet">{profile.industry}</Badge>}
           <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
             {profile.profile_uuid.slice(0, 8)}…
           </code>
@@ -59,7 +85,11 @@ export function RunPanel({
             aria-live="polite"
           >
             <Spinner label="Running pipeline" />
-            <span>Running the agentic pipeline — this usually takes a few seconds.</span>
+            <span>
+              {asyncMode
+                ? `Background run ${run?.status === "queued" ? "queued" : "in progress"} — polling for completion…`
+                : "Running the agentic pipeline — this usually takes a few seconds."}
+            </span>
           </div>
         )}
 
@@ -73,7 +103,8 @@ export function RunPanel({
           <>
             {run.error_flag && (
               <Banner tone="warning" title={`Degraded run (${run.status})`}>
-                {run.degraded_reason ?? "The pipeline returned partial results."}
+                {run.degraded_reason ??
+                  "The pipeline returned partial results."}
               </Banner>
             )}
 
@@ -83,13 +114,24 @@ export function RunPanel({
                   Status
                 </dt>
                 <dd className="mt-1">
-                  <Badge tone={runStatusTone(run.status)}>{runStatusLabel(run.status)}</Badge>
+                  <Badge tone={runStatusTone(run.status)}>
+                    {runStatusLabel(run.status)}
+                  </Badge>
                 </dd>
               </div>
-              <Stat label="Planned calls" value={formatInt(run.planned_retrieval_calls)} />
-              <Stat label="Extracted" value={formatInt(run.extracted_records)} />
+              <Stat
+                label="Planned calls"
+                value={formatInt(run.planned_retrieval_calls)}
+              />
+              <Stat
+                label="Extracted"
+                value={formatInt(run.extracted_records)}
+              />
               <Stat label="Total tokens" value={formatInt(run.total_tokens)} />
-              <Stat label="Insights" value={formatInt(run.top_insights.length)} />
+              <Stat
+                label="Insights"
+                value={formatInt(run.top_insights.length)}
+              />
             </dl>
 
             <p className="text-xs text-slate-400 dark:text-slate-500">
@@ -118,7 +160,9 @@ function TopInsights({ insights }: { insights: Insight[] }) {
   }
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Top insights</h3>
+      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+        Top insights
+      </h3>
       <ul className="space-y-2">
         {insights.map((insight, index) => (
           <li
@@ -132,12 +176,17 @@ function TopInsights({ insights }: { insights: Insight[] }) {
               <div className="flex items-center gap-2">
                 <Badge tone={visibilityTone(insight.visibility_status)}>
                   {visibilityLabel(insight.visibility_status)}
-                  {insight.visibility_position != null && ` · #${insight.visibility_position}`}
+                  {insight.visibility_position != null &&
+                    ` · #${insight.visibility_position}`}
                 </Badge>
-                <Badge tone="blue">score {formatScore(insight.opportunity_score)}</Badge>
+                <Badge tone="blue">
+                  score {formatScore(insight.opportunity_score)}
+                </Badge>
               </div>
             </div>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{insight.rationale}</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {insight.rationale}
+            </p>
             <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
               volume {formatInt(insight.estimated_search_volume)} · difficulty{" "}
               {insight.competitive_difficulty}/100

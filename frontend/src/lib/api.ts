@@ -98,11 +98,26 @@ export function getProfile(
   return apiFetch<ProfileDetailResponse>(`/api/v1/profiles/${profileUuid}`);
 }
 
-/** Run the full agentic pipeline for a profile (synchronous, 10-30s). */
-export function runPipeline(profileUuid: string): Promise<RunResponse> {
-  return apiFetch<RunResponse>(`/api/v1/profiles/${profileUuid}/run`, {
+/**
+ * Run the full agentic pipeline for a profile.
+ *
+ * Synchronous by default (blocks 10-30s, returns the completed run). With
+ * `{ async: true }` the run is enqueued to a background worker and this resolves
+ * immediately with a `queued` run; poll {@link getRun} until it is terminal.
+ */
+export function runPipeline(
+  profileUuid: string,
+  options: { async?: boolean } = {},
+): Promise<RunResponse> {
+  const qs = options.async ? "?async=true" : "";
+  return apiFetch<RunResponse>(`/api/v1/profiles/${profileUuid}/run${qs}`, {
     method: "POST",
   });
+}
+
+/** Fetch the current status and result of a run (for polling async runs). */
+export function getRun(runUuid: string): Promise<RunResponse> {
+  return apiFetch<RunResponse>(`/api/v1/runs/${runUuid}`);
 }
 
 /** List discovered queries for a profile's most recent run. */

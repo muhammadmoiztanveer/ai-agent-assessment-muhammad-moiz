@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ApiError, runPipeline } from "./lib/api";
+import { ApiError, getRun, runPipeline } from "./lib/api";
 import type { ProfileCreatedResponse, RunResponse } from "./lib/types";
 import { Header } from "./components/Header";
 import { ProfileForm } from "./components/ProfileForm";
@@ -13,15 +13,36 @@ export default function App() {
   const [run, setRun] = useState<RunResponse | null>(null);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+  // Run in the background (async bonus) instead of blocking synchronously.
+  const [asyncMode, setAsyncMode] = useState(false);
   // Bumped after each run / recheck to refresh the dependent panels.
   const [refreshKey, setRefreshKey] = useState(0);
+
+  /** Poll a queued/running run until it reaches a terminal status. */
+  async function pollUntilDone(runUuid: string): Promise<RunResponse> {
+    const deadline = Date.now() + 60_000;
+    while (Date.now() < deadline) {
+      const latest = await getRun(runUuid);
+      if (latest.status !== "queued" && latest.status !== "running") {
+        return latest;
+      }
+      setRun(latest); // live queued → running feedback
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    throw new ApiError(0, "The background run did not finish in time.");
+  }
 
   async function handleRun() {
     if (!profile) return;
     setRunning(true);
     setRunError(null);
     try {
-      const result = await runPipeline(profile.profile_uuid);
+      const started = await runPipeline(profile.profile_uuid, {
+        async: asyncMode,
+      });
+      const result = asyncMode
+        ? await pollUntilDone(started.run_uuid)
+        : started;
       setRun(result);
       setRefreshKey((k) => k + 1);
     } catch (err) {
@@ -52,6 +73,8 @@ export default function App() {
               run={run}
               running={running}
               error={runError}
+              asyncMode={asyncMode}
+              onAsyncModeChange={setAsyncMode}
               onRun={handleRun}
               onReset={handleReset}
             />

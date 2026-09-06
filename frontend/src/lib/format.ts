@@ -15,6 +15,8 @@ export function runStatusTone(status: string): Tone {
       return "red";
     case "running":
       return "blue";
+    case "queued":
+      return "violet";
     default:
       return "slate";
   }
