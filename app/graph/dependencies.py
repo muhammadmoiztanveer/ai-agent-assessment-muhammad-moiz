@@ -71,7 +71,11 @@ def build_dependencies(
             deterministic keyless client.
     """
     settings = settings or get_settings()
-    client = client if client is not None else build_client(settings)
+    if client is None:
+        # Wire the client's retry callback into the run metrics so retries are
+        # counted and attributed to the node during which they occur.
+        on_retry = (lambda _attempt: metrics.record_retry()) if metrics is not None else None
+        client = build_client(settings, on_retry=on_retry)
     tools = build_dataforseo_tools(client)
 
     if llm is None:

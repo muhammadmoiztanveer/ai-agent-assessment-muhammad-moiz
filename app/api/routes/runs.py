@@ -14,6 +14,8 @@ results.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Query, Response, status
 
 from app.schemas.run import RunResponse
@@ -36,12 +38,23 @@ def run_pipeline(
         alias="async",
         description="Run in the background and return 202 immediately (poll GET /runs/{uuid}).",
     ),
+    simulate: Literal["outage", "degraded"] | None = Query(
+        default=None,
+        description=(
+            "Inject a deterministic dependency failure to demonstrate resilience: "
+            "'outage' → all retrieval fails (run 'failed' via fallback); "
+            "'degraded' → some calls fail (run 'partial'). Runs synchronously."
+        ),
+    ),
 ) -> RunResponse:
     """Run Planner → Retrieval → Extraction → Analysis → Report and persist it.
 
     Synchronous by default (200). With ``?async=true`` the run is queued and this
-    returns 202 with ``status: "queued"``.
+    returns 202 with ``status: "queued"``. ``?simulate=`` forces a synchronous run
+    with an injected failure so the fallback/partial path can be shown live.
     """
+    if simulate is not None:
+        return pipeline_service.run_profile_pipeline(profile_uuid, simulate=simulate)
     if async_:
         result = pipeline_service.enqueue_profile_run(profile_uuid)
         response.status_code = status.HTTP_202_ACCEPTED

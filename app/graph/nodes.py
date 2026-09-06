@@ -80,6 +80,7 @@ def _instrument(
                 node=node_name,
                 duration_ms=duration_ms,
                 success=success,
+                retry_count=metrics.take_pending_retries(),
                 api_calls=api_calls,
                 error_code=error_code,
             )

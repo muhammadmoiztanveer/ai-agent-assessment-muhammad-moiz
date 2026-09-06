@@ -153,6 +153,9 @@ class Run(Base):
     correlation_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     error_flag: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     error_detail: Mapped[dict[str, Any] | None] = mapped_column(SAJSON, nullable=True)
+    # Per-run observability summary (node latency/success/retries, API-call and
+    # token totals) captured from RunMetrics, so a run can be traced after the fact.
+    metrics: Mapped[dict[str, Any] | None] = mapped_column(SAJSON, nullable=True)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )

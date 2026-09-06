@@ -43,6 +43,9 @@ class RunMetrics:
     total_tokens: int = 0
     _started_at: float = field(default_factory=time.perf_counter)
     _finished_at: float | None = None
+    # Retries observed since the last node boundary, awaiting attribution to the
+    # node during which they occurred (see ``take_pending_retries``).
+    _pending_retries: int = 0
 
     # --- recording -------------------------------------------------------- #
     def record_node(
@@ -71,6 +74,20 @@ class RunMetrics:
         """Accumulate LLM token usage for the run."""
         if tokens:
             self.total_tokens += tokens
+
+    def record_retry(self) -> None:
+        """Note that a transient failure was retried (attributed at node boundary)."""
+        self._pending_retries += 1
+
+    def take_pending_retries(self) -> int:
+        """Return retries observed since the last call and reset the counter.
+
+        Called once per node so retries are attributed to the node during which
+        they happened (in practice, the retrieval node that makes API calls).
+        """
+        pending = self._pending_retries
+        self._pending_retries = 0
+        return pending
 
     def finish(self) -> None:
         """Mark the run as finished (freezes total duration)."""

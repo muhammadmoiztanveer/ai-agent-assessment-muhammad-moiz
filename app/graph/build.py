@@ -55,6 +55,7 @@ from app.graph.state import (
     PipelineState,
     initial_state,
 )
+from app.integrations.dataforseo.client import MockHook, build_client
 from app.observability.logging import get_logger
 from app.observability.metrics import RunMetrics
 from app.observability.tracing import correlation_context, new_correlation_id
@@ -116,12 +117,17 @@ def run_pipeline(
     settings: Settings | None = None,
     correlation_id: str | None = None,
     deps: PipelineDependencies | None = None,
+    mock_hook: MockHook | None = None,
 ) -> PipelineState:
     """Execute one full pipeline run and return the final state.
 
     A per-run :class:`RunMetrics` collector is created and its token callback is
     wired into the LLM client (via ``deps``), so the returned state carries an
     accurate ``total_tokens`` and the metrics summary is logged at the end.
+
+    ``mock_hook`` (mock mode only) injects deterministic transient faults through
+    the real retry/circuit-breaker path — used by the ``?simulate=`` demo and the
+    resilience tests to exercise graceful degradation end-to-end.
     """
     settings = settings or get_settings()
     correlation_id = correlation_id or new_correlation_id()
@@ -129,7 +135,13 @@ def run_pipeline(
 
     # Build dependencies bound to this run's metrics so token usage is captured.
     if deps is None:
-        deps = build_dependencies(settings, metrics=metrics)
+        client = None
+        if mock_hook is not None:
+            # Build the client here so its retries are still counted into metrics.
+            client = build_client(
+                settings, mock_hook=mock_hook, on_retry=lambda _a: metrics.record_retry()
+            )
+        deps = build_dependencies(settings, metrics=metrics, client=client)
     graph = build_graph(deps)
 
     with correlation_context(correlation_id):

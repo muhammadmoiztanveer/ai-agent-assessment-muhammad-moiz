@@ -20,7 +20,9 @@ query by matching ``query_text``.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any, Literal
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app.agents.types import AnalysisResult, ProfileContext
@@ -30,9 +32,19 @@ from app.db.database import session_scope
 from app.db.models import Profile, Run, RunStatus
 from app.graph.build import run_pipeline
 from app.graph.state import PipelineState
+from app.integrations.dataforseo.client import MockHook
 from app.observability.logging import get_logger
 from app.observability.tracing import new_correlation_id
-from app.schemas.run import InsightSchema, ReportSchema, RunResponse
+from app.schemas.run import (
+    InsightSchema,
+    NodeMetricSchema,
+    ObservabilitySchema,
+    ReportSchema,
+    RunResponse,
+)
+
+# Failure-simulation modes exposed via ``POST /run?simulate=...`` (demo + tests).
+SimulateMode = Literal["outage", "degraded"]
 
 _logger = get_logger("service.pipeline")
 
@@ -63,8 +75,30 @@ def _research_question(profile: Profile) -> str:
 # --------------------------------------------------------------------------- #
 # Public entrypoints
 # --------------------------------------------------------------------------- #
-def run_profile_pipeline(profile_uuid: str) -> RunResponse:
-    """Execute the pipeline synchronously and persist + return the run."""
+def _simulate_hook(mode: SimulateMode) -> MockHook:
+    """Build a deterministic fault-injection hook for a simulation mode.
+
+    - ``outage``: every retrieval call fails → all retries exhausted → the graph
+      routes to ``fallback`` and the run ends ``failed`` (no crash).
+    - ``degraded``: only the SERP-family calls fail while others succeed → some
+      usable data survives → the run ends ``partial`` with an error flag.
+    """
+
+    def hook(path: str, _payload: dict[str, Any]) -> None:
+        if mode == "outage":
+            raise httpx.ConnectTimeout("simulated dependency outage")
+        if "/serp/" in path:  # degraded: fail SERP endpoints only
+            raise httpx.ConnectTimeout("simulated partial outage (serp)")
+
+    return hook
+
+
+def run_profile_pipeline(profile_uuid: str, *, simulate: SimulateMode | None = None) -> RunResponse:
+    """Execute the pipeline synchronously and persist + return the run.
+
+    ``simulate`` injects a deterministic dependency failure so the resilience /
+    fallback behaviour can be demonstrated live from the API or dashboard.
+    """
     correlation_id = new_correlation_id()
 
     # 1. Load the profile (short read) and create the run row up front so it is
@@ -86,6 +120,7 @@ def run_profile_pipeline(profile_uuid: str) -> RunResponse:
         profile=context,
         research_question=research_question,
         correlation_id=correlation_id,
+        mock_hook=_simulate_hook(simulate) if simulate else None,
     )
 
     # 3. Persist results into the run row and return the response.
@@ -227,6 +262,10 @@ def _apply_state_to_run(session: Session, run: Run, state: PipelineState) -> Non
     run.report_json = report_json
     run.report_summary = report_summary
     run.top_insights = [i.as_dict() for i in top_insights]
+    # Persist the per-run observability trace/metrics so a finished run can be
+    # inspected node-by-node through the API (and rendered by the dashboard).
+    metrics = state.get("metrics")
+    run.metrics = metrics.summary() if metrics is not None else None
     run.finished_at = datetime.now(UTC)
     session.flush()
 
@@ -312,6 +351,36 @@ def _run_to_response(run: Run) -> RunResponse:
         correlation_id=run.correlation_id,
         started_at=run.started_at,
         finished_at=run.finished_at,
+        observability=_observability_from_row(run),
+    )
+
+
+def _observability_from_row(run: Run) -> ObservabilitySchema | None:
+    """Rebuild the observability trace/metrics summary from a run's stored JSON."""
+    data = run.metrics
+    if not data:
+        return None
+    return ObservabilitySchema(
+        correlation_id=str(data.get("correlation_id", run.correlation_id)),
+        total_duration_ms=float(data.get("total_duration_ms", 0.0)),
+        node_count=int(data.get("node_count", 0)),
+        success_count=int(data.get("success_count", 0)),
+        failure_count=int(data.get("failure_count", 0)),
+        success_rate=float(data.get("success_rate", 0.0)),
+        total_api_calls=int(data.get("total_api_calls", 0)),
+        total_retries=int(data.get("total_retries", 0)),
+        total_tokens=int(data.get("total_tokens", 0)),
+        nodes=[
+            NodeMetricSchema(
+                node=str(n.get("node", "")),
+                duration_ms=float(n.get("duration_ms", 0.0)),
+                success=bool(n.get("success", False)),
+                retry_count=int(n.get("retry_count", 0)),
+                api_calls=int(n.get("api_calls", 0)),
+                error_code=n.get("error_code"),
+            )
+            for n in data.get("nodes", [])
+        ],
     )
 
 
