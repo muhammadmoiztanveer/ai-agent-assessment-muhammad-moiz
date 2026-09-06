@@ -18,6 +18,7 @@ from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DataForSeoMode = Literal["mock", "live", "stub"]
+LlmMode = Literal["auto", "openai", "mock"]
 
 
 class Settings(BaseSettings):
@@ -31,9 +32,11 @@ class Settings(BaseSettings):
     )
 
     # --- LLM ---------------------------------------------------------------
+    llm_mode: LlmMode = Field(default="auto", alias="LLM_MODE")
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     llm_model: str = Field(default="gpt-4o-mini", alias="LLM_MODEL")
     llm_temperature: float = Field(default=0.0, ge=0.0, le=2.0, alias="LLM_TEMPERATURE")
+    llm_max_retries: int = Field(default=3, ge=1, le=10, alias="LLM_MAX_RETRIES")
 
     # --- DataForSEO --------------------------------------------------------
     dataforseo_mode: DataForSeoMode = Field(default="mock", alias="DATAFORSEO_MODE")
@@ -95,6 +98,27 @@ class Settings(BaseSettings):
                 "DATAFORSEO_MODE=live requires DATAFORSEO_LOGIN and DATAFORSEO_PASSWORD to be set"
             )
         return self
+
+    @model_validator(mode="after")
+    def _validate_llm_mode(self) -> Settings:
+        """Explicit ``openai`` mode requires an API key (``auto`` falls back to mock)."""
+        if self.llm_mode == "openai" and not self.openai_api_key:
+            raise ValueError("LLM_MODE=openai requires OPENAI_API_KEY to be set")
+        return self
+
+    @property
+    def use_real_llm(self) -> bool:
+        """Whether to use the real OpenAI-backed client.
+
+        ``openai`` forces it; ``mock`` forbids it; ``auto`` (default) uses the real
+        client only when an API key is present, so the system runs keyless by
+        default and lights up automatically when a key is provided.
+        """
+        if self.llm_mode == "openai":
+            return True
+        if self.llm_mode == "mock":
+            return False
+        return bool(self.openai_api_key)
 
     @property
     def is_sqlite(self) -> bool:
