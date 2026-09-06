@@ -7,11 +7,13 @@ persistence, resilience, and observability.
 
 Built for the _AI Agent Engineer — Technical Assessment (v2.0)_.
 
-> **Build status:** complete. Persistence, observability, resilience, DataForSEO tools, the LLM layer,
-> the five atomic agents, the LangGraph DAG, the full FastAPI service + endpoint layer, the complete
-> spec-mandated test suite (202 tests green), and the beyond-spec React dashboard are all implemented and
-> verified — `make check` is clean (ruff + mypy + 202 tests) and a live `POST /run` returns `completed`
-> in mock mode with zero credentials. See **[`STATUS.md`](./STATUS.md)** for the phase-by-phase record.
+> **Build status:** complete, including **both** bonuses named in the assessment (circuit breaker §3.5
+> and async/background run processing §4.2). Persistence, observability, resilience, DataForSEO tools,
+> the LLM layer, the five atomic agents, the LangGraph DAG, the full FastAPI service + endpoint layer,
+> the complete spec-mandated test suite (**210 tests green**), and the beyond-spec React dashboard are all
+> implemented and verified — `make check` is clean (ruff + mypy + 210 tests) and a live `POST /run`
+> returns `completed` in mock mode with zero credentials. See **[`STATUS.md`](./STATUS.md)** for the
+> phase-by-phase record.
 
 ---
 
@@ -22,14 +24,17 @@ Built for the _AI Agent Engineer — Technical Assessment (v2.0)_.
 - [The five agents](#the-five-agents)
 - [Tech stack](#tech-stack)
 - [Project structure](#project-structure)
-- [Getting started](#getting-started)
+- [Getting started (local setup)](#getting-started-local-setup)
 - [Configuration](#configuration)
 - [DataForSEO modes](#dataforseo-modes)
 - [opportunity_score](#opportunity_score)
 - [API overview](#api-overview)
+- [Synchronous vs async runs (bonus)](#synchronous-vs-async-runs-bonus)
 - [Resilience & observability](#resilience--observability)
 - [Testing](#testing)
+- [Manual test walkthrough](#manual-test-walkthrough)
 - [Frontend (beyond-spec)](#frontend-beyond-spec)
+- [Bonuses implemented](#bonuses-implemented)
 - [Known limitations & what I'd improve](#known-limitations--what-id-improve)
 - [Documentation index](#documentation-index)
 
@@ -157,35 +162,91 @@ Each agent does exactly one job — combining them into "do-everything" agents i
 
 ---
 
-## Getting started
+## Getting started (local setup)
 
-### Prerequisites
+The system is designed to run from a **single command with zero credentials**. In the default
+DataForSEO `mock` mode there is no network access and no API key required, so `make install && make run`
+is all you need for a fully working end-to-end pipeline.
 
-- Python **3.11+** (developed on 3.13)
-- Node **20+** and npm (only for the optional frontend)
-- No API keys required — the system runs fully in DataForSEO **mock mode** by default.
+### 1. Prerequisites
 
-### Backend
+| Requirement | Version | Needed for                                   |
+| ----------- | ------- | -------------------------------------------- |
+| Python      | 3.11+   | the backend (developed and verified on 3.13) |
+| `make`      | any     | the convenience task runner (optional)       |
+| Node + npm  | 20+     | the optional beyond-spec frontend only       |
+
+No `OPENAI_API_KEY` and no DataForSEO credentials are required to run or test the system.
+
+### 2. Clone and enter the project
 
 ```bash
-make install     # create .venv and install the package + dev dependencies
-make run         # start the API at http://localhost:8000
+git clone <your-fork-or-clone-url> ai-agent-assessment-muhammad-moiz
+cd ai-agent-assessment-muhammad-moiz
 ```
 
-Then open:
+### 3. Install and run the backend
 
-- Health probe: <http://localhost:8000/health>
-- Interactive API docs: <http://localhost:8000/docs>
+```bash
+make install     # creates .venv and installs the package + dev dependencies
+make run         # starts the API at http://localhost:8000
+```
 
-Equivalent without Make: `python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"` then
-`.venv/bin/python -m app`.
+That is the single-command run. When the server is up you'll see structured JSON startup logs, and you
+can open:
 
-### Frontend (optional, beyond-spec)
+- **Health probe:** <http://localhost:8000/health>
+- **Interactive API docs (Swagger UI):** <http://localhost:8000/docs>
+- **OpenAPI schema:** <http://localhost:8000/openapi.json>
+
+<details>
+<summary>Run without <code>make</code> (equivalent commands)</summary>
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -e ".[dev]"
+.venv/bin/python -m app
+```
+
+</details>
+
+### 4. (Optional) create a `.env`
+
+Every setting has a safe default, so this is optional. To customize, copy the template and edit:
+
+```bash
+cp .env.example .env
+```
+
+See [Configuration](#configuration) for the full list of keys.
+
+### 5. (Optional) run the frontend dashboard
+
+The dashboard is beyond the assessment scope; the backend runs and is gradable without it.
 
 ```bash
 make install-frontend    # npm install in frontend/
-make run-frontend        # start Vite dev server at http://localhost:5173
+make run-frontend        # Vite dev server at http://localhost:5173
 ```
+
+Keep the backend running in another terminal — the dashboard talks to it over HTTP
+(`VITE_API_BASE_URL`, default `http://localhost:8000`).
+
+### One-command quick reference
+
+| Command                 | What it does                                          |
+| ----------------------- | ----------------------------------------------------- |
+| `make install`          | Create the virtualenv and install backend + dev deps  |
+| `make run`              | Start the API server (`python -m app`)                |
+| `make test`             | Run the full pytest suite (210 tests, hermetic)       |
+| `make lint`             | Lint with ruff                                        |
+| `make typecheck`        | Static type-check with mypy                           |
+| `make check`            | `lint` + `typecheck` + `test` (the full quality gate) |
+| `make format`           | Auto-format with black and apply ruff fixes           |
+| `make install-frontend` | `npm install` in `frontend/`                          |
+| `make run-frontend`     | Start the Vite dev server for the dashboard           |
+| `make build-frontend`   | Production build of the dashboard                     |
 
 ---
 
@@ -199,6 +260,7 @@ in mock mode. Key groups:
 - **Timeouts & retries** — `HTTP_CONNECT_TIMEOUT_S`, `HTTP_READ_TIMEOUT_S`, `RETRY_MAX_ATTEMPTS`, `RETRY_BASE_DELAY_S`, `RETRY_MAX_DELAY_S`, `CIRCUIT_BREAKER_FAIL_THRESHOLD`, `CIRCUIT_BREAKER_COOLDOWN_S`
 - **Scoring** — `OPP_WEIGHT_VOLUME`, `OPP_WEIGHT_DIFFICULTY`, `OPP_WEIGHT_GAP`, `OPP_VOLUME_CAP`
 - **App** — `DATABASE_URL`, `LOG_LEVEL`, `API_HOST`, `API_PORT`, `LANGCHAIN_TRACING_V2`
+- **Async runs (bonus)** — `RUN_WORKER_CONCURRENCY` (background worker-pool size; default `4`)
 
 Configuration is validated at startup (e.g. scoring weights must sum to `1.0`; `live` mode requires
 DataForSEO credentials).
@@ -242,17 +304,19 @@ Weights (default `0.4 / 0.3 / 0.3`) and the volume cap are configurable and must
 
 Base path: `/api/v1`. All responses are JSON; no authentication (out of scope).
 
-| Method | Path                                       | Purpose                                   |
-| ------ | ------------------------------------------ | ----------------------------------------- |
-| POST   | `/profiles`                                | Register a brand/keyword profile          |
-| GET    | `/profiles/{profile_uuid}`                 | Get a profile + summary stats             |
-| POST   | `/profiles/{profile_uuid}/run`             | Run the full DAG (core endpoint)          |
-| GET    | `/profiles/{profile_uuid}/queries`         | Discovered queries (filter/sort/paginate) |
-| GET    | `/profiles/{profile_uuid}/recommendations` | Content recommendations                   |
-| POST   | `/queries/{query_uuid}/recheck`            | Partial re-run for a single query         |
+| Method | Path                                       | Purpose                                                           |
+| ------ | ------------------------------------------ | ----------------------------------------------------------------- |
+| POST   | `/profiles`                                | Register a brand/keyword profile                                  |
+| GET    | `/profiles/{profile_uuid}`                 | Get a profile + summary stats                                     |
+| POST   | `/profiles/{profile_uuid}/run`             | Run the full DAG (core endpoint) — `?async=true` to background it |
+| GET    | `/runs/{run_uuid}`                         | Poll a run's status + result (used by async runs)                 |
+| GET    | `/profiles/{profile_uuid}/queries`         | Discovered queries (filter/sort/paginate)                         |
+| GET    | `/profiles/{profile_uuid}/recommendations` | Content recommendations                                           |
+| POST   | `/queries/{query_uuid}/recheck`            | Partial re-run for a single query                                 |
 
-> All six endpoints are implemented and covered by contract tests (`tests/test_api.py`). The live,
-> always-current contract is available at `/docs` once the server is running.
+> Every endpoint is implemented and covered by contract tests (`tests/test_api.py`,
+> `tests/test_async_runs.py`). The live, always-current contract is available at `/docs` once the server
+> is running.
 
 ### Quick curl walkthrough
 
@@ -278,6 +342,39 @@ curl -s -X POST http://localhost:8000/api/v1/queries/<query_uuid>/recheck
 Degraded runs return HTTP 200 with `status: "partial"` / `"failed"` and `error_flag: true` (not an HTTP
 error), so callers can always inspect partial results. Unknown UUIDs return `404`; invalid input `422` —
 both in the uniform `{"error": {"code", "message", "details"}}` envelope.
+
+---
+
+## Synchronous vs async runs (bonus)
+
+The spec accepts a synchronous run endpoint and lists async/background processing as an explicit
+**bonus** (§4.2). Both modes are implemented over the same DAG:
+
+- **Synchronous (default).** `POST /profiles/{uuid}/run` executes the pipeline inline and returns
+  **HTTP 200** with the completed run. A run typically takes a few seconds in mock mode.
+- **Asynchronous (bonus).** `POST /profiles/{uuid}/run?async=true` enqueues the run to an in-process
+  background worker pool and returns **HTTP 202 immediately** with `status: "queued"`. The run then
+  transitions `queued → running → completed`/`partial`/`failed`, which you poll via
+  `GET /api/v1/runs/{run_uuid}`.
+
+```bash
+# Enqueue a background run — returns 202 with status "queued" right away
+RUN_UUID=$(curl -s -X POST "http://localhost:8000/api/v1/profiles/<profile_uuid>/run?async=true" | jq -r .run_uuid)
+
+# Poll until the status is terminal (completed / partial / failed)
+curl -s "http://localhost:8000/api/v1/runs/$RUN_UUID" | jq '{status, planned_retrieval_calls, extracted_records}'
+```
+
+**Design.** The queue lives behind a small `RunQueue` interface (`app/services/run_queue.py`). The
+default `ThreadPoolRunQueue` uses an in-process `ThreadPoolExecutor` — real background execution with
+**no external broker**, so the single-command, zero-credential run is preserved. The worker owns its own
+DB sessions and always records a terminal status (even on unexpected failure), so a poller never sees a
+run wedged in `running`. For a horizontally-scaled deployment, the same interface is satisfied by a
+Celery/RQ-backed implementation (the worker is already a plain `(run_uuid: str) -> None` callable) —
+that swap is the natural next step and is noted under limitations.
+
+The dashboard exposes this too: tick **“Background (async)”** in the run panel to enqueue and watch the
+live `queued → running → completed` transitions.
 
 ---
 
@@ -355,14 +452,59 @@ With more time, the in-process observability would graduate to:
 ## Testing
 
 ```bash
-make test        # run the pytest suite
+make test        # run the full pytest suite (210 tests)
 make lint        # ruff
 make typecheck   # mypy
-make check       # lint + typecheck + test
+make check       # lint + typecheck + test  (the full quality gate)
 ```
 
-Tests are hermetic (mock LLM + mock DataForSEO + in-memory SQLite) and cover, at minimum, a happy-path
-run, a simulated API failure that retries/falls back, and tool-call argument validation.
+Tests are **hermetic** (scripted LLM + mock DataForSEO + temp SQLite) — no network and no credentials —
+so the whole suite runs in about a second and is fully reproducible. Coverage goes well beyond the three
+mandated cases:
+
+| Test file                                                         | What it proves                                                                    |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `test_happy_path.py`                                              | Full DAG run → `completed`, correct response shape, one metric per node           |
+| `test_failure_retry.py`                                           | Transient failure classified + retried with backoff/jitter → succeeds             |
+| `test_fallback_degradation.py`                                    | Exhausted retries → `partial`/`failed` with `error_flag`, no crash, breaker trips |
+| `test_tool_validation.py`                                         | Malformed/missing tool args rejected **before** any API call, graceful result     |
+| `test_api_contracts.py`                                           | Status codes (201/200/404/422), response shapes, filters, pagination, recheck     |
+| `test_opportunity_score.py`                                       | Formula correctness, `[0,1]` bounds, monotonicity, weight sensitivity             |
+| `test_async_runs.py`                                              | Async bonus: 202 `queued`, background completion via polling, worker robustness   |
+| `test_persistence.py`                                             | ORM round-trip, filters, summary stats, recheck update/replace                    |
+| `test_observability.py`                                           | Secret redaction, correlation-id propagation, metrics aggregation                 |
+| `test_resilience.py`                                              | Error taxonomy, backoff/jitter bounds, circuit-breaker state transitions          |
+| `test_tools.py`, `test_llm.py`, `test_agents.py`, `test_graph.py` | Layer-by-layer unit + integration coverage                                        |
+
+---
+
+## Manual test walkthrough
+
+Two easy ways to exercise the running system end-to-end.
+
+### A. Swagger UI (no tools needed)
+
+1. `make run`, then open <http://localhost:8000/docs>.
+2. `POST /api/v1/profiles` → **Try it out** with a body like
+   `{"name":"Surfer SEO","domain":"surferseo.com","industry":"SEO Software","competitors":["clearscope.io"]}`
+   → expect **201** and copy the `profile_uuid`.
+3. `POST /api/v1/profiles/{profile_uuid}/run` → expect **200**, `status: "completed"`,
+   `planned_retrieval_calls`, `extracted_records`, and scored `top_insights`.
+4. `GET /api/v1/profiles/{profile_uuid}/queries?min_score=0.5&status=not_visible` → filtered, sorted list.
+5. `GET /api/v1/profiles/{profile_uuid}/recommendations` → content recommendations.
+6. `POST /api/v1/queries/{query_uuid}/recheck` → updated single query.
+7. **Async bonus:** `POST /api/v1/profiles/{profile_uuid}/run?async=true` → **202** `queued`, then
+   `GET /api/v1/runs/{run_uuid}` until `status` is terminal.
+
+### B. Dashboard (frontend)
+
+1. Keep `make run` going; in another terminal: `make install-frontend && make run-frontend`.
+2. Open <http://localhost:5173>. The header badge should show the backend as connected.
+3. **Create a profile** → **Run pipeline** (leave the toggle off for a synchronous run).
+4. Inspect the run summary, top insights, queries table (try the filters + a row **recheck**),
+   recommendations, and the report panel (expand the raw JSON / correlation-id trace).
+5. **Test the async bonus:** tick **“Background (async)”**, click **Run pipeline**, and watch the live
+   `queued → running → completed` status while the dashboard polls `GET /runs/{uuid}` in the background.
 
 ---
 
@@ -382,7 +524,9 @@ The dashboard walks the whole pipeline in one page:
 
 1. **Create a profile** — name, domain, industry, description, competitors (with inline validation).
 2. **Run the pipeline** — one click triggers `POST /run`; a live spinner covers the run, then a status
-   badge (`completed` / `partial` / `failed`) and a degraded-run banner appear.
+   badge (`completed` / `partial` / `failed`) and a degraded-run banner appear. A **“Background (async)”**
+   toggle switches to the async bonus path (`?async=true` + polling `GET /runs/{uuid}`) with live
+   `queued → running` feedback.
 3. **Run summary** — planned retrieval calls, extracted records, total tokens, insight count, plus the
    run and correlation IDs.
 4. **Top insights** — scored, ranked queries with visibility badges and rationale.
@@ -396,15 +540,30 @@ navigable, and dark-mode aware. A live backend-connection badge polls `/health`.
 
 ---
 
+## Bonuses implemented
+
+The assessment names two bonuses; **both are delivered and tested**:
+
+| Bonus (spec section)                                           | Where                                                                                        |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| **Circuit breaker** for a repeatedly-failing dependency (§3.5) | `app/resilience/circuit_breaker.py` (closed → open → half-open) + `tests/test_resilience.py` |
+| **Async / background run processing** + task queue (§4.2)      | `app/services/run_queue.py`, `?async=true` + `GET /runs/{uuid}` + `tests/test_async_runs.py` |
+
+A responsive **React dashboard** (`frontend/`) is an additional beyond-spec extra.
+
+---
+
 ## Known limitations & what I'd improve
 
 - **DataForSEO defaults to mock mode.** Responses are deterministic fixtures modeled on the real
   `tasks[].result[]` envelope so the system runs and tests hermetically with zero credentials. `live`
   mode is fully wired (Basic auth, timeouts, retry + breaker); with a sandbox key I'd validate the real
   response shapes and expand the extraction mappers per endpoint.
-- **Synchronous run endpoint.** A run takes 10–30s and blocks the request (the spec allows this). For
-  production I'd move runs to a task queue (Celery/RQ) with a `GET /runs/{uuid}` status endpoint and,
-  optionally, streaming progress.
+- **Async runs use an in-process worker pool.** The async bonus (`?async=true` + `GET /runs/{uuid}`) runs
+  in a `ThreadPoolExecutor`, which is ideal for this scope and keeps the run single-command and
+  broker-free. For horizontal scale I'd drop a Celery/RQ backend into the existing `RunQueue` interface
+  (a durable broker + separate worker processes) and add optional streaming progress. The synchronous
+  endpoint remains the default and satisfies the spec on its own.
 - **SQLite persistence.** Ideal for the scope; the SQLAlchemy models port to Postgres with a URL change.
   I'd add Alembic migrations and connection pooling for a real deployment.
 - **In-memory metrics.** The per-run collector is process-local; production would export to OpenTelemetry
