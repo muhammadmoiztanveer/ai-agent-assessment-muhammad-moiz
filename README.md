@@ -7,11 +7,11 @@ persistence, resilience, and observability.
 
 Built for the _AI Agent Engineer — Technical Assessment (v2.0)_.
 
-> **Build status:** backend complete through Phase 8 — persistence, observability, resilience, DataForSEO
-> tools, LLM layer, the five atomic agents, the LangGraph DAG, and the full FastAPI service + endpoint
-> layer are all implemented and verified (141 tests green; live `POST /run` returns `completed` in mock
-> mode). Remaining: the dedicated Phase 9 test files, the expanded Phase 10 README, and the beyond-spec
-> Phase 11 frontend. See **[`STATUS.md`](./STATUS.md)** for the live, phase-by-phase record.
+> **Build status:** backend complete through Phase 9 — persistence, observability, resilience, DataForSEO
+> tools, LLM layer, the five atomic agents, the LangGraph DAG, the full FastAPI service + endpoint layer,
+> and the complete spec-mandated test suite are all implemented and verified (202 tests green; live
+> `POST /run` returns `completed` in mock mode). Remaining: the expanded Phase 10 README and the
+> beyond-spec Phase 11 frontend. See **[`STATUS.md`](./STATUS.md)** for the live, phase-by-phase record.
 
 ---
 

@@ -4,8 +4,8 @@
 > Companion docs: [`PLAN.md`](./PLAN.md) (engineering plan) · [`WHAT_TO_BUILD.md`](./WHAT_TO_BUILD.md) (plain-English scope).
 
 **Last updated:** 2026-09-06
-**Current phase:** Phase 9 — Full test suite (next)
-**Overall progress:** Phases 0–8 of 11 complete (foundation + persistence + observability + resilience + DataForSEO tools + LLM layer + 5 atomic agents + LangGraph DAG + FastAPI services & endpoints ✅)
+**Current phase:** Phase 10 — README + polish (next)
+**Overall progress:** Phases 0–9 of 11 complete (foundation + persistence + observability + resilience + DataForSEO tools + LLM layer + 5 atomic agents + LangGraph DAG + FastAPI services & endpoints + full spec-mandated test suite ✅)
 
 Legend: ✅ done · 🔄 in progress · ☐ not started
 
@@ -119,15 +119,17 @@ Legend: ✅ done · 🔄 in progress · ☐ not started
 - [x] Verified: black + ruff clean (70 files), mypy clean (60 files), **pytest 141 passed** (+14); live `python -m app` boot on a temp DB → `/health` 200, `/docs` 200, all 6 OpenAPI paths, live `POST /run` → `completed`; end-to-end TestClient flow (create → run → queries/recs/recheck) green
 - [x] Commit: `feat(api): FastAPI endpoints + services wiring`
 
-### ☐ Phase 9 — Full test suite
+### ✅ Phase 9 — Full test suite
 
-- [ ] `test_happy_path.py`
-- [ ] `test_failure_retry.py`
-- [ ] `test_fallback_degradation.py`
-- [ ] `test_tool_validation.py`
-- [ ] `test_api_contracts.py`
-- [ ] `test_opportunity_score.py`
-- [ ] Commit: `test: happy path, failure+retry, fallback, tool validation, API contracts`
+- [x] `tests/conftest.py` — shared hermetic fixtures (`FAST_RETRY`, `make_settings`, `make_profile`, `make_deps`, `run_full_pipeline`; `api_client` temp-SQLite TestClient + `create_profile` factory) so the spec-named files stay focused
+- [x] `test_happy_path.py` (8 tests) — full DAG run at the graph level **and** through the HTTP API → `completed`, every mandated response field present, insights == extracted_count, one metric per node in order, top insights sorted by opportunity score
+- [x] `test_failure_retry.py` (16 tests) — retryable vs non-retryable classification (timeouts/429/5xx vs 400/401/404/422), `Retry-After` parsing, exponential backoff growth/cap/full-jitter-bounds/override, retry executor (retry-then-succeed, fast-fail, exhaustion), and an integration retry-then-succeed on a real tool call
+- [x] `test_fallback_degradation.py` (4 tests) — total retrieval failure → `failed` + `error_flag` + report (no crash), circuit breaker trips, analysis skipped; partial failure → `partial` with analysis still running
+- [x] `test_tool_validation.py` (10 tests) — JSON schema exposed; blank/missing/unknown/out-of-range/empty args rejected as clean non-retryable `ToolResult` **before** any API call; redaction-safe error detail; bad-args plan degrades gracefully through the Retrieval agent (never crashes the graph)
+- [x] `test_api_contracts.py` (13 tests) — 201/200/404/422 codes, exact response shapes, opportunity-score sort, `min_score`/`status`/pagination filters, uniform error envelope, recheck update path, empty-run edge case
+- [x] `test_opportunity_score.py` (10 tests) — exact formula values, hard `[0,1]` bounds under extreme/degenerate inputs, monotonicity in volume/difficulty/visibility-gap, configurable-weight sensitivity, 4-dp rounding, Analysis-agent ranking
+- [x] Verified: black clean (77 files), ruff clean, mypy clean (60 app files), **pytest 202 passed** (+61); all hermetic (mock DataForSEO + scripted LLM + temp SQLite), ~1.1s, no network
+- [x] Commit: `test: happy path, failure+retry, fallback, tool validation, API contracts`
 
 ### ☐ Phase 10 — README + polish (graded deliverable)
 
@@ -152,53 +154,53 @@ Legend: ✅ done · 🔄 in progress · ☐ not started
 
 Each row is done only when a file/test proves it.
 
-| #   | Requirement                                               | Status | Proof (file/test)                                                                       |
-| --- | --------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------- |
-| R1  | Explicit LangGraph DAG, named nodes/edges                 | ✅     | `app/graph/build.py` + `tests/test_graph.py`                                            |
-| R2  | Conditional routing + fallback path                       | ✅     | `app/graph/edges.py` + `tests/test_graph.py`                                            |
-| R3  | DAG diagram in README                                     | ☐      | `README.md`                                                                             |
-| R4  | 5 atomic single-responsibility agents                     | ✅     | `app/agents/{planner,retrieval,extraction,analysis,report}.py` + `tests/test_agents.py` |
-| R5  | No agent does two jobs                                    | ✅     | typed contracts in `app/agents/types.py` + per-agent isolation tests                    |
-| R6  | Tools defined with Pydantic/JSON schemas                  | ✅     | `app/tools/schemas.py` + `tests/test_tools.py`                                          |
-| R7  | LLM decides tool + args; validate before real call        | ✅     | `app/tools/base.py` (validate-before-call) + `tests/test_tools.py`                      |
-| R8  | Graceful handling of malformed/partial tool args          | ✅     | `app/tools/base.py` + `tests/test_tools.py`                                             |
-| R9  | DataForSEO integration w/ documented mode flag            | ✅     | `app/integrations/dataforseo/client.py` + `tests/test_tools.py`                         |
-| R10 | One tool per logical API call                             | ✅     | `app/tools/dataforseo_tools.py` + `tests/test_tools.py`                                 |
-| R11 | Retry w/ exponential backoff + jitter                     | ✅     | `app/resilience/retry.py` + `tests/test_resilience.py`                                  |
-| R12 | Retryable vs non-retryable classification                 | ✅     | `app/resilience/errors.py` + `tests/test_resilience.py`                                 |
-| R13 | Sane timeouts on all external calls                       | ✅     | `app/integrations/dataforseo/client.py` (httpx connect+read `Timeout`)                  |
-| R14 | Graceful degradation / partial results + error flag       | ✅     | `app/graph/nodes.py` (fallback + status) + `app/graph/edges.py` + `tests/test_graph.py` |
-| R15 | Circuit breaker (bonus)                                   | ✅     | `app/resilience/circuit_breaker.py` + `tests/test_resilience.py`                        |
-| R16 | Structured JSON logs per node                             | ✅     | `app/observability/logging.py` + `tests/test_observability.py`                          |
-| R17 | Trace across run (correlation ID)                         | ✅     | `app/observability/tracing.py` + `tests/test_observability.py`                          |
-| R18 | Metrics: latency, success/fail, API call counts           | ✅     | `app/observability/metrics.py` + `tests/test_observability.py`                          |
-| R19 | README: production observability roadmap                  | ☐      | `README.md`                                                                             |
-| R20 | `POST /api/v1/profiles` → 201 shape                       | ✅     | `app/api/routes/profiles.py` + `app/services/profile_service.py` + `tests/test_api.py`  |
-| R21 | `GET /api/v1/profiles/{uuid}` + summary stats             | ✅     | `app/api/routes/profiles.py` + `app/services/profile_service.py` + `tests/test_api.py`  |
-| R22 | `POST /api/v1/profiles/{uuid}/run` full DAG               | ✅     | `app/api/routes/runs.py` + `app/services/pipeline_service.py` + `tests/test_api.py`     |
-| R23 | `GET .../queries` filters + pagination + fields           | ✅     | `app/api/routes/queries.py` + `app/services/profile_service.py` + `tests/test_api.py`   |
-| R24 | `GET .../recommendations` + fields                        | ✅     | `app/api/routes/recommendations.py` + `app/services/profile_service.py` + `test_api.py` |
-| R25 | `POST /api/v1/queries/{uuid}/recheck` partial re-run      | ✅     | `app/api/routes/queries.py` + `app/services/recheck_service.py` + `tests/test_api.py`   |
-| R26 | Persistence: profiles/runs/queries/recommendations        | ✅     | `app/db/models.py` + `db/repositories.py` + `tests/test_persistence.py`                 |
-| R27 | README (architecture, setup, agents, failures, obs, ...)  | ☐      | `README.md`                                                                             |
-| R28 | Tests: happy, failure+retry/fallback, tool-arg validation | ☐      | `tests/`                                                                                |
-| R29 | `.env.example` documenting config                         | ✅     | `.env.example`                                                                          |
-| R30 | Single-command run + clear git history                    | 🔄     | `Makefile`, commits                                                                     |
-| R31 | opportunity_score formula documented                      | ✅     | `app/agents/analysis.py` (`opportunity_score`) + `tests/test_agents.py` + README        |
-| R32 | total tokens used surfaced                                | ✅     | `app/llm/base.py` (`total_tokens`) + `app/llm/client.py` + `tests/test_llm.py`          |
+| #   | Requirement                                               | Status | Proof (file/test)                                                                                              |
+| --- | --------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------- |
+| R1  | Explicit LangGraph DAG, named nodes/edges                 | ✅     | `app/graph/build.py` + `tests/test_graph.py`                                                                   |
+| R2  | Conditional routing + fallback path                       | ✅     | `app/graph/edges.py` + `tests/test_graph.py`                                                                   |
+| R3  | DAG diagram in README                                     | ☐      | `README.md`                                                                                                    |
+| R4  | 5 atomic single-responsibility agents                     | ✅     | `app/agents/{planner,retrieval,extraction,analysis,report}.py` + `tests/test_agents.py`                        |
+| R5  | No agent does two jobs                                    | ✅     | typed contracts in `app/agents/types.py` + per-agent isolation tests                                           |
+| R6  | Tools defined with Pydantic/JSON schemas                  | ✅     | `app/tools/schemas.py` + `tests/test_tools.py`                                                                 |
+| R7  | LLM decides tool + args; validate before real call        | ✅     | `app/tools/base.py` (validate-before-call) + `tests/test_tools.py`                                             |
+| R8  | Graceful handling of malformed/partial tool args          | ✅     | `app/tools/base.py` + `tests/test_tools.py`                                                                    |
+| R9  | DataForSEO integration w/ documented mode flag            | ✅     | `app/integrations/dataforseo/client.py` + `tests/test_tools.py`                                                |
+| R10 | One tool per logical API call                             | ✅     | `app/tools/dataforseo_tools.py` + `tests/test_tools.py`                                                        |
+| R11 | Retry w/ exponential backoff + jitter                     | ✅     | `app/resilience/retry.py` + `tests/test_resilience.py`                                                         |
+| R12 | Retryable vs non-retryable classification                 | ✅     | `app/resilience/errors.py` + `tests/test_resilience.py`                                                        |
+| R13 | Sane timeouts on all external calls                       | ✅     | `app/integrations/dataforseo/client.py` (httpx connect+read `Timeout`)                                         |
+| R14 | Graceful degradation / partial results + error flag       | ✅     | `app/graph/nodes.py` (fallback + status) + `app/graph/edges.py` + `tests/test_graph.py`                        |
+| R15 | Circuit breaker (bonus)                                   | ✅     | `app/resilience/circuit_breaker.py` + `tests/test_resilience.py`                                               |
+| R16 | Structured JSON logs per node                             | ✅     | `app/observability/logging.py` + `tests/test_observability.py`                                                 |
+| R17 | Trace across run (correlation ID)                         | ✅     | `app/observability/tracing.py` + `tests/test_observability.py`                                                 |
+| R18 | Metrics: latency, success/fail, API call counts           | ✅     | `app/observability/metrics.py` + `tests/test_observability.py`                                                 |
+| R19 | README: production observability roadmap                  | ☐      | `README.md`                                                                                                    |
+| R20 | `POST /api/v1/profiles` → 201 shape                       | ✅     | `app/api/routes/profiles.py` + `app/services/profile_service.py` + `tests/test_api.py`                         |
+| R21 | `GET /api/v1/profiles/{uuid}` + summary stats             | ✅     | `app/api/routes/profiles.py` + `app/services/profile_service.py` + `tests/test_api.py`                         |
+| R22 | `POST /api/v1/profiles/{uuid}/run` full DAG               | ✅     | `app/api/routes/runs.py` + `app/services/pipeline_service.py` + `tests/test_api.py`                            |
+| R23 | `GET .../queries` filters + pagination + fields           | ✅     | `app/api/routes/queries.py` + `app/services/profile_service.py` + `tests/test_api.py`                          |
+| R24 | `GET .../recommendations` + fields                        | ✅     | `app/api/routes/recommendations.py` + `app/services/profile_service.py` + `test_api.py`                        |
+| R25 | `POST /api/v1/queries/{uuid}/recheck` partial re-run      | ✅     | `app/api/routes/queries.py` + `app/services/recheck_service.py` + `tests/test_api.py`                          |
+| R26 | Persistence: profiles/runs/queries/recommendations        | ✅     | `app/db/models.py` + `db/repositories.py` + `tests/test_persistence.py`                                        |
+| R27 | README (architecture, setup, agents, failures, obs, ...)  | ☐      | `README.md`                                                                                                    |
+| R28 | Tests: happy, failure+retry/fallback, tool-arg validation | ✅     | `tests/test_happy_path.py`, `test_failure_retry.py`, `test_fallback_degradation.py`, `test_tool_validation.py` |
+| R29 | `.env.example` documenting config                         | ✅     | `.env.example`                                                                                                 |
+| R30 | Single-command run + clear git history                    | 🔄     | `Makefile`, commits                                                                                            |
+| R31 | opportunity_score formula documented                      | ✅     | `app/agents/analysis.py` (`opportunity_score`) + `tests/test_agents.py` + README                               |
+| R32 | total tokens used surfaced                                | ✅     | `app/llm/base.py` (`total_tokens`) + `app/llm/client.py` + `tests/test_llm.py`                                 |
 
-**Done:** 27 / 32 (+1 in progress) — remaining rows (R3, R19, R27, R28, R30) flip as Phases 9–10 land.
+**Done:** 28 / 32 (+1 in progress) — remaining rows (R3, R19, R27, R30) flip as Phase 10 lands (R30's clean git history is accumulating with each phase commit).
 
 ---
 
-## Verification snapshot (through Phase 8)
+## Verification snapshot (through Phase 9)
 
 | Check             | Command                     | Result                                                         |
 | ----------------- | --------------------------- | -------------------------------------------------------------- |
 | Lint              | `make lint`                 | ✅ clean                                                       |
-| Format            | `black --check`             | ✅ clean (70 files)                                            |
-| Type-check        | `make typecheck`            | ✅ clean (60 files)                                            |
-| Tests             | `make test`                 | ✅ 141 passed                                                  |
+| Format            | `black --check`             | ✅ clean (77 files)                                            |
+| Type-check        | `make typecheck`            | ✅ clean (60 app files)                                        |
+| Tests             | `make test`                 | ✅ 202 passed (incl. spec-mandated happy/failure/validation)   |
 | API boots         | `python -m app` → `/health` | ✅ 200 + `/docs` 200 + all 6 `/api/v1` paths in OpenAPI        |
 | API contracts     | `tests/test_api.py`         | ✅ 201/200/404/422, shapes, sort, filters, pagination, recheck |
 | DB schema         | `init_db()`                 | ✅ 4 tables created (lifespan + direct)                        |

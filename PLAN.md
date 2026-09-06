@@ -42,7 +42,7 @@ This is the master checklist. Nothing ships until every row is ✅. (Status fill
 | R25 | `POST /api/v1/queries/{uuid}/recheck` partial re-run (§4.2)                                     | `app/api/routes/queries.py`         | ✅     |
 | R26 | Persistence: profiles/runs/queries/recommendations (§5)                                         | `app/db/models.py`                  | ✅     |
 | R27 | README (architecture, setup, agents, failures+example, observability+excerpt, limitations) (§5) | `README.md`                         | ☐      |
-| R28 | Tests: happy path, simulated failure+retry/fallback, tool-arg validation (§5)                   | `tests/`                            | ☐      |
+| R28 | Tests: happy path, simulated failure+retry/fallback, tool-arg validation (§5)                   | `tests/` (spec-named files)         | ✅     |
 | R29 | `.env.example` documenting config (§5)                                                          | `.env.example`                      | ☐      |
 | R30 | Single-command run + clear git history (§7)                                                     | `Makefile`, commits                 | ☐      |
 | R31 | opportunity_score formula documented (§4.2)                                                     | `app/agents/analysis.py` + README   | ✅     |
@@ -685,9 +685,11 @@ and a **git commit** (clear history, §7/R30).
 - [x] Verified: black + ruff clean (70 files), mypy clean (60 files), **pytest 141 passed** (+14); live `python -m app` boot → `/health` 200, `/docs` 200, live `POST /run` → `completed`.
 - **Commit:** "feat(api): FastAPI endpoints + services wiring". (R20–R25)
 
-### Phase 9 — Full test suite
+### Phase 9 — Full test suite ✅
 
-- [ ] All test files from §11 green; coverage of happy/failure/validation paths.
+- [x] `tests/conftest.py` — shared hermetic fixtures so the spec-named files stay focused.
+- [x] All six test files from §11 green: `test_happy_path.py`, `test_failure_retry.py`, `test_fallback_degradation.py`, `test_tool_validation.py`, `test_api_contracts.py`, `test_opportunity_score.py` — explicit coverage of the three mandated types (happy path, simulated failure + retry/fallback, tool-arg validation) plus API contracts and the scoring formula.
+- [x] Verified: black clean (77 files), ruff clean, mypy clean (60 app files), **pytest 202 passed** (+61); fully hermetic (mock DataForSEO + scripted LLM + temp SQLite), ~1.1s, no network.
 - **Commit:** "test: happy path, failure+retry, fallback, tool validation, API contracts". (R28)
 
 ### Phase 10 — README + polish
