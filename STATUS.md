@@ -4,8 +4,8 @@
 > Companion docs: [`PLAN.md`](./PLAN.md) (engineering plan) · [`WHAT_TO_BUILD.md`](./WHAT_TO_BUILD.md) (plain-English scope).
 
 **Last updated:** 2026-09-06
-**Current phase:** Phase 4 — DataForSEO integration + tools (next)
-**Overall progress:** Phases 0–3 of 11 complete (foundation + persistence + observability + resilience ✅)
+**Current phase:** Phase 5 — LLM layer (next)
+**Overall progress:** Phases 0–4 of 11 complete (foundation + persistence + observability + resilience + DataForSEO tools ✅)
 
 Legend: ✅ done · 🔄 in progress · ☐ not started
 
@@ -57,13 +57,17 @@ Legend: ✅ done · 🔄 in progress · ☐ not started
 - [x] Verified: ruff + black clean, mypy clean (27 files), **pytest 56 passed**; live demo confirmed backoff `[0.5, 1.0]`, non-retryable fast-fail, breaker trips → `open`, 429 (retryable + `Retry-After=5.0`) vs 401 (non-retryable)
 - [x] Commit: `feat(resilience): retry/backoff/jitter, classification, breaker`
 
-### ☐ Phase 4 — DataForSEO integration + tools
+### ✅ Phase 4 — DataForSEO integration + tools
 
-- [ ] `integrations/dataforseo/client.py` (httpx, timeouts, mode switch, retry + breaker)
-- [ ] `integrations/dataforseo/endpoints.py` + realistic `mock/` fixtures
-- [ ] `tools/schemas.py`, `tools/base.py` (validating wrapper), `tools/dataforseo_tools.py`
-- [ ] Tests: tool-arg validation, mock round-trip, injected failure → classified error
-- [ ] Commit: `feat(tools): typed DataForSEO tools + validating wrapper + mock client`
+- [x] `integrations/dataforseo/endpoints.py` — `Endpoint` registry (4 logical calls: serp_organic, ai_overview, llm_visibility, keyword_metrics) so "one tool = one API call" is structural
+- [x] `integrations/dataforseo/mock/fixtures.py` — deterministic (sha256-seeded) fixtures mirroring the real `tasks[].result[]` envelope; reproducible timestamps (no wall-clock `now()`)
+- [x] `integrations/dataforseo/client.py` — httpx client with explicit connect+read timeouts (R13), mode switch (`mock`|`live`|`stub`), Basic auth for live, retry+breaker pipeline, `mock_hook` fault-injection seam, `last_retry_count`
+- [x] `tools/schemas.py` — 4 strict Pydantic arg schemas (typed, described, bounded, `extra="forbid"`)
+- [x] `tools/base.py` — `ToolResult` + `ValidatedTool` (validate-before-call; malformed args → clean non-retryable result, never crashes; `json_schema()` for LLM binding)
+- [x] `tools/dataforseo_tools.py` — `build_dataforseo_tools()` registry, one `ValidatedTool` per logical call
+- [x] Tests: `tests/test_tools.py` (23 tests) — happy-path shapes, determinism, arg validation (blank/missing/unknown/out-of-range/empty), retry-then-succeed, exhaustion → retryable failure, breaker fast-fail, live mode via `MockTransport` (200/401/503), stub mode
+- [x] Verified: ruff + black (39 files) clean, mypy clean (33 files), **pytest 79 passed** (+23)
+- [x] Commit: `feat(tools): typed DataForSEO tools + validating wrapper + mock client`
 
 ### ☐ Phase 5 — LLM layer
 
@@ -138,14 +142,14 @@ Each row is done only when a file/test proves it.
 | R3  | DAG diagram in README                                     | ☐      | `README.md`                                                             |
 | R4  | 5 atomic single-responsibility agents                     | ☐      | `app/agents/*.py`                                                       |
 | R5  | No agent does two jobs                                    | ☐      | node contracts + tests                                                  |
-| R6  | Tools defined with Pydantic/JSON schemas                  | ☐      | `app/tools/schemas.py`                                                  |
-| R7  | LLM decides tool + args; validate before real call        | ☐      | `app/tools/base.py`                                                     |
-| R8  | Graceful handling of malformed/partial tool args          | ☐      | `app/tools/base.py`                                                     |
-| R9  | DataForSEO integration w/ documented mode flag            | ☐      | `app/integrations/dataforseo/`                                          |
-| R10 | One tool per logical API call                             | ☐      | `app/tools/dataforseo_tools.py`                                         |
+| R6  | Tools defined with Pydantic/JSON schemas                  | ✅     | `app/tools/schemas.py` + `tests/test_tools.py`                          |
+| R7  | LLM decides tool + args; validate before real call        | ✅     | `app/tools/base.py` (validate-before-call) + `tests/test_tools.py`      |
+| R8  | Graceful handling of malformed/partial tool args          | ✅     | `app/tools/base.py` + `tests/test_tools.py`                             |
+| R9  | DataForSEO integration w/ documented mode flag            | ✅     | `app/integrations/dataforseo/client.py` + `tests/test_tools.py`         |
+| R10 | One tool per logical API call                             | ✅     | `app/tools/dataforseo_tools.py` + `tests/test_tools.py`                 |
 | R11 | Retry w/ exponential backoff + jitter                     | ✅     | `app/resilience/retry.py` + `tests/test_resilience.py`                  |
 | R12 | Retryable vs non-retryable classification                 | ✅     | `app/resilience/errors.py` + `tests/test_resilience.py`                 |
-| R13 | Sane timeouts on all external calls                       | 🔄     | config in `app/config.py` (wired into httpx client in Phase 4)          |
+| R13 | Sane timeouts on all external calls                       | ✅     | `app/integrations/dataforseo/client.py` (httpx connect+read `Timeout`)  |
 | R14 | Graceful degradation / partial results + error flag       | ☐      | fallback node + state                                                   |
 | R15 | Circuit breaker (bonus)                                   | ✅     | `app/resilience/circuit_breaker.py` + `tests/test_resilience.py`        |
 | R16 | Structured JSON logs per node                             | ✅     | `app/observability/logging.py` + `tests/test_observability.py`          |
@@ -166,23 +170,24 @@ Each row is done only when a file/test proves it.
 | R31 | opportunity_score formula documented                      | ☐      | `app/agents/analysis.py` + README                                       |
 | R32 | total tokens used surfaced                                | ☐      | token callback in LLM client                                            |
 
-**Done:** 8 / 32 (+2 in progress) — feature rows flip as Phases 4–10 land.
+**Done:** 14 / 32 (+1 in progress) — feature rows flip as Phases 5–10 land.
 
 ---
 
-## Verification snapshot (through Phase 3)
+## Verification snapshot (through Phase 4)
 
-| Check          | Command                | Result                                      |
-| -------------- | ---------------------- | ------------------------------------------- |
-| Lint           | `make lint`            | ✅ clean                                    |
-| Format         | `black --check`        | ✅ clean (32 files)                         |
-| Type-check     | `make typecheck`       | ✅ clean (27 files)                         |
-| Tests          | `make test`            | ✅ 56 passed                                |
-| API boots      | `make run` → `/health` | ✅ 200 + `/docs`                            |
-| DB schema      | `init_db()`            | ✅ 4 tables created                         |
-| Observability  | JSON logs + redaction  | ✅ corr-id + secrets scrubbed               |
-| Resilience     | retry / classify / CB  | ✅ backoff+jitter, fast-fail, breaker trips |
-| Frontend build | `npm run build`        | ✅ compiles                                 |
+| Check            | Command                | Result                                           |
+| ---------------- | ---------------------- | ------------------------------------------------ |
+| Lint             | `make lint`            | ✅ clean                                         |
+| Format           | `black --check`        | ✅ clean (39 files)                              |
+| Type-check       | `make typecheck`       | ✅ clean (33 files)                              |
+| Tests            | `make test`            | ✅ 79 passed                                     |
+| API boots        | `make run` → `/health` | ✅ 200 + `/docs`                                 |
+| DB schema        | `init_db()`            | ✅ 4 tables created                              |
+| Observability    | JSON logs + redaction  | ✅ corr-id + secrets scrubbed                    |
+| Resilience       | retry / classify / CB  | ✅ backoff+jitter, fast-fail, breaker trips      |
+| DataForSEO tools | mock / live / stub     | ✅ validate-before-call, retry+breaker, timeouts |
+| Frontend build   | `npm run build`        | ✅ compiles                                      |
 
 ---
 

@@ -20,14 +20,14 @@ This is the master checklist. Nothing ships until every row is ✅. (Status fill
 | R3  | DAG diagram in README (§3.1)                                                                    | `README.md` (Mermaid)               | ☐      |
 | R4  | 5 atomic single-responsibility agents (§3.2)                                                    | `app/agents/*.py`                   | ☐      |
 | R5  | No agent does two jobs (§3.2)                                                                   | Code review + node contracts        | ☐      |
-| R6  | Tools defined with Pydantic/JSON schemas (§3.3)                                                 | `app/tools/schemas.py`              | ☐      |
-| R7  | LLM decides tool + args; validate args before real call (§3.3)                                  | `app/tools/base.py`                 | ☐      |
-| R8  | Graceful handling of malformed/partial tool args (§3.3)                                         | `app/tools/base.py`                 | ☐      |
-| R9  | DataForSEO integration w/ documented mode flag (§3.4)                                           | `app/integrations/dataforseo/`      | ☐      |
-| R10 | One tool per logical API call (§3.4)                                                            | `app/tools/dataforseo_tools.py`     | ☐      |
+| R6  | Tools defined with Pydantic/JSON schemas (§3.3)                                                 | `app/tools/schemas.py`              | ✅     |
+| R7  | LLM decides tool + args; validate args before real call (§3.3)                                  | `app/tools/base.py`                 | ✅     |
+| R8  | Graceful handling of malformed/partial tool args (§3.3)                                         | `app/tools/base.py`                 | ✅     |
+| R9  | DataForSEO integration w/ documented mode flag (§3.4)                                           | `app/integrations/dataforseo/`      | ✅     |
+| R10 | One tool per logical API call (§3.4)                                                            | `app/tools/dataforseo_tools.py`     | ✅     |
 | R11 | Retry w/ exponential backoff + jitter (§3.5)                                                    | `app/resilience/retry.py`           | ✅     |
 | R12 | Retryable vs non-retryable classification (§3.5)                                                | `app/resilience/errors.py`          | ✅     |
-| R13 | Sane timeouts on all external calls (§3.5)                                                      | HTTP client config                  | 🔄     |
+| R13 | Sane timeouts on all external calls (§3.5)                                                      | HTTP client config                  | ✅     |
 | R14 | Graceful degradation / partial results + error flag (§3.5)                                      | fallback node + state               | ☐      |
 | R15 | Circuit breaker (bonus) (§3.5)                                                                  | `app/resilience/circuit_breaker.py` | ✅     |
 | R16 | Structured JSON logs per node (inputs redacted, outputs, duration, success, retries) (§3.6)     | `app/observability/logging.py`      | ✅     |
@@ -637,12 +637,13 @@ and a **git commit** (clear history, §7/R30).
 - [x] Verified: ruff + black clean, mypy clean (27 files), pytest 56 passed.
 - **Commit:** "feat(resilience): retry/backoff/jitter, error classification, circuit breaker". (R11, R12, R15; R13 wired in Phase 4)
 
-### Phase 4 — DataForSEO integration + tools
+### Phase 4 — DataForSEO integration + tools ✅
 
-- [ ] `integrations/dataforseo/client.py` (httpx, timeouts, mode switch, retry+breaker), `endpoints.py`,
-      realistic `mock/` fixtures.
-- [ ] `tools/schemas.py`, `tools/base.py` (ValidatedTool), `tools/dataforseo_tools.py` (one per call).
-- [ ] Tests: tool-arg validation (R8), mock call round-trip, injected failure → classified error.
+- [x] `integrations/dataforseo/client.py` (httpx, connect+read timeouts, mode switch, retry+breaker), `endpoints.py`,
+      realistic deterministic `mock/` fixtures.
+- [x] `tools/schemas.py`, `tools/base.py` (ValidatedTool + ToolResult), `tools/dataforseo_tools.py` (one per call).
+- [x] Tests: `tests/test_tools.py` (23 tests) — tool-arg validation (R8), mock round-trip, injected failure → classified error, live-mode via MockTransport.
+- [x] Verified: ruff + black clean (39 files), mypy clean (33 files), pytest 79 passed.
 - **Commit:** "feat(tools): typed DataForSEO tools + validating wrapper + mock client". (R6–R10, R13)
 
 ### Phase 5 — LLM layer
