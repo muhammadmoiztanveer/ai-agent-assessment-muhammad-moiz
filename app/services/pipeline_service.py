@@ -1,17 +1,20 @@
 """Pipeline service — run the full DAG for a profile and persist the results.
 
-This is the heart of ``POST /api/v1/profiles/{uuid}/run``. It:
+This is the heart of ``POST /api/v1/profiles/{uuid}/run``. It supports two
+execution modes over the same core logic:
 
-1. loads the profile and builds the agent-facing :class:`ProfileContext`,
-2. runs the compiled LangGraph pipeline **outside** any DB transaction (a run can
-   take 10-30s, so no connection is held open while agents work),
-3. persists the run, its discovered queries, and its recommendations in a short
-   final transaction, and
-4. returns a fully-serialized :class:`RunResponse`.
+* **Synchronous** (:func:`run_profile_pipeline`, the spec's core behaviour): create
+  the run row, execute the DAG inline, persist, and return the completed run.
+* **Asynchronous** (:func:`enqueue_profile_run` + :func:`execute_run`, the spec
+  §4.2 bonus): create a ``queued`` run row, hand it to the background task queue,
+  and return immediately; a worker later transitions it to ``running`` and then a
+  terminal state. Callers poll :func:`get_run_response` via ``GET /runs/{uuid}``.
 
-Discovered queries are persisted from the Analysis agent's ranked insights (which
-already carry the opportunity score and visibility), and each recommendation is
-linked to its target query by matching ``query_text``.
+In both modes the DAG runs **outside** any DB transaction (a run can take 10-30s,
+so no connection is held while agents work), and the run/queries/recommendations
+are persisted in a short final transaction. Discovered queries come from the
+Analysis agent's ranked insights; each recommendation is linked to its target
+query by matching ``query_text``.
 """
 
 from __future__ import annotations
@@ -24,10 +27,11 @@ from app.agents.types import AnalysisResult, ProfileContext
 from app.api.errors import NotFoundError
 from app.db import repositories as repo
 from app.db.database import session_scope
-from app.db.models import Profile, RunStatus
+from app.db.models import Profile, Run, RunStatus
 from app.graph.build import run_pipeline
 from app.graph.state import PipelineState
 from app.observability.logging import get_logger
+from app.observability.tracing import new_correlation_id
 from app.schemas.run import InsightSchema, ReportSchema, RunResponse
 
 _logger = get_logger("service.pipeline")
@@ -56,31 +60,155 @@ def _research_question(profile: Profile) -> str:
     )
 
 
+# --------------------------------------------------------------------------- #
+# Public entrypoints
+# --------------------------------------------------------------------------- #
 def run_profile_pipeline(profile_uuid: str) -> RunResponse:
-    """Execute the pipeline for a profile and persist + return the run."""
-    # 1. Load the profile (short read) and capture what the run needs.
+    """Execute the pipeline synchronously and persist + return the run."""
+    correlation_id = new_correlation_id()
+
+    # 1. Load the profile (short read) and create the run row up front so it is
+    #    always inspectable, even mid-flight.
     with session_scope() as session:
-        profile = repo.get_profile(session, profile_uuid)
-        if profile is None:
-            raise NotFoundError(f"Profile '{profile_uuid}' not found.")
+        profile = _require_profile(session, profile_uuid)
         context = _profile_context(profile)
         research_question = _research_question(profile)
+        run = repo.create_run(
+            session,
+            profile_uuid=profile_uuid,
+            correlation_id=correlation_id,
+            status=RunStatus.RUNNING,
+        )
+        run_uuid = run.run_uuid
 
     # 2. Run the DAG with no DB transaction held open.
-    state = run_pipeline(profile=context, research_question=research_question)
+    state = run_pipeline(
+        profile=context,
+        research_question=research_question,
+        correlation_id=correlation_id,
+    )
 
-    # 3. Persist the run + queries + recommendations, then build the response.
+    # 3. Persist results into the run row and return the response.
     with session_scope() as session:
-        return _persist_run(session, profile_uuid=profile_uuid, state=state)
+        run = _require_run(session, run_uuid)
+        _apply_state_to_run(session, run, state)
+        return _run_to_response(run)
 
 
-def _persist_run(session: Session, *, profile_uuid: str, state: PipelineState) -> RunResponse:
-    """Write the run, its queries, and its recommendations; return the response."""
+def enqueue_profile_run(profile_uuid: str) -> RunResponse:
+    """Create a ``queued`` run and hand it to the background queue (async bonus).
+
+    Returns immediately with the queued run so the caller can poll
+    ``GET /api/v1/runs/{run_uuid}`` for progress and the final result.
+    """
+    # Import here to avoid an import cycle (run_queue lazily imports this module).
+    from app.services.run_queue import get_run_queue
+
+    correlation_id = new_correlation_id()
+    with session_scope() as session:
+        _require_profile(session, profile_uuid)  # 404 before we enqueue anything
+        run = repo.create_run(
+            session,
+            profile_uuid=profile_uuid,
+            correlation_id=correlation_id,
+            status=RunStatus.QUEUED,
+        )
+        run_uuid = run.run_uuid
+        response = _run_to_response(run)
+
+    get_run_queue().submit(run_uuid)
+    _logger.info("service.pipeline.enqueued", run_uuid=run_uuid, profile_uuid=profile_uuid)
+    return response
+
+
+def execute_run(run_uuid: str) -> None:
+    """Background worker body: execute a queued run to a terminal state.
+
+    Owns its own DB sessions (it runs in a worker thread) and always records a
+    terminal status — even on unexpected failure — so a polling client never sees
+    a run wedged in ``running``.
+    """
+    # 1. Transition queued → running and capture what the DAG needs.
+    try:
+        with session_scope() as session:
+            run = repo.get_run(session, run_uuid)
+            if run is None:  # pragma: no cover - defensive
+                _logger.warning("service.pipeline.execute_missing_run", run_uuid=run_uuid)
+                return
+            profile = repo.get_profile(session, run.profile_uuid)
+            if profile is None:  # pragma: no cover - FK guarantees this
+                _mark_failed(session, run, "profile no longer exists")
+                return
+            run.status = RunStatus.RUNNING
+            context = _profile_context(profile)
+            research_question = _research_question(profile)
+            correlation_id = run.correlation_id
+    except Exception:  # pragma: no cover - defensive
+        _logger.exception("service.pipeline.execute_setup_failed", run_uuid=run_uuid)
+        return
+
+    # 2. Run the DAG outside any transaction.
+    try:
+        state = run_pipeline(
+            profile=context,
+            research_question=research_question,
+            correlation_id=correlation_id,
+        )
+    except Exception as exc:  # pragma: no cover - the graph itself degrades, not raises
+        _logger.exception("service.pipeline.execute_dag_failed", run_uuid=run_uuid)
+        with session_scope() as session:
+            run = repo.get_run(session, run_uuid)
+            if run is not None:
+                _mark_failed(session, run, f"pipeline crashed: {type(exc).__name__}")
+        return
+
+    # 3. Persist results.
+    with session_scope() as session:
+        run = repo.get_run(session, run_uuid)
+        if run is None:  # pragma: no cover - deleted mid-run
+            return
+        _apply_state_to_run(session, run, state)
+    _logger.info("service.pipeline.executed", run_uuid=run_uuid, status=state.get("status"))
+
+
+def get_run_response(run_uuid: str) -> RunResponse:
+    """Return the current state of a run (any status) as a :class:`RunResponse`."""
+    with session_scope() as session:
+        run = _require_run(session, run_uuid)
+        return _run_to_response(run)
+
+
+# --------------------------------------------------------------------------- #
+# Internals
+# --------------------------------------------------------------------------- #
+def _require_profile(session: Session, profile_uuid: str) -> Profile:
+    profile = repo.get_profile(session, profile_uuid)
+    if profile is None:
+        raise NotFoundError(f"Profile '{profile_uuid}' not found.")
+    return profile
+
+
+def _require_run(session: Session, run_uuid: str) -> Run:
+    run = repo.get_run(session, run_uuid)
+    if run is None:
+        raise NotFoundError(f"Run '{run_uuid}' not found.")
+    return run
+
+
+def _mark_failed(session: Session, run: Run, reason: str) -> None:
+    """Force a run into the ``failed`` terminal state with a reason."""
+    run.status = RunStatus.FAILED
+    run.error_flag = True
+    run.error_detail = {"degraded_reason": reason}
+    run.finished_at = datetime.now(UTC)
+    session.flush()
+
+
+def _apply_state_to_run(session: Session, run: Run, state: PipelineState) -> None:
+    """Populate an existing run row + its queries + recommendations from state."""
     status_value = state.get("status", "failed")
-    correlation_id = state.get("correlation_id", "")
     error_flag = bool(state.get("error_flag", False))
     degraded_reason = state.get("degraded_reason")
-    total_tokens = state.get("total_tokens")
 
     analysis: AnalysisResult | None = state.get("analysis")
     insights = list(analysis.insights) if analysis else []
@@ -90,15 +218,10 @@ def _persist_run(session: Session, *, profile_uuid: str, state: PipelineState) -
     report_summary = report.report_summary if report else ""
     top_insights = insights[:_TOP_INSIGHTS]
 
-    run = repo.create_run(
-        session,
-        profile_uuid=profile_uuid,
-        correlation_id=correlation_id,
-        status=RunStatus(status_value),
-    )
+    run.status = RunStatus(status_value)
     run.planned_retrieval_calls = int(state.get("planned_call_count", 0))
     run.extracted_records = int(state.get("extracted_count", 0))
-    run.total_tokens = total_tokens
+    run.total_tokens = state.get("total_tokens")
     run.error_flag = error_flag
     run.error_detail = {"degraded_reason": degraded_reason} if degraded_reason else None
     run.report_json = report_json
@@ -114,7 +237,7 @@ def _persist_run(session: Session, *, profile_uuid: str, state: PipelineState) -
         query = repo.add_query(
             session,
             run_uuid=run.run_uuid,
-            profile_uuid=profile_uuid,
+            profile_uuid=run.profile_uuid,
             query_text=insight.query_text,
             estimated_search_volume=insight.estimated_search_volume,
             competitive_difficulty=insight.competitive_difficulty,
@@ -151,33 +274,50 @@ def _persist_run(session: Session, *, profile_uuid: str, state: PipelineState) -
         recommendations=len(recommendations),
     )
 
+
+def _run_to_response(run: Run) -> RunResponse:
+    """Serialize a run row (any status) into a :class:`RunResponse`.
+
+    A single serialization path used by the sync run, the async enqueue response,
+    and the ``GET /runs/{uuid}`` poll — so every surface reports runs identically.
+    """
+    degraded_reason = (run.error_detail or {}).get("degraded_reason")
+    top_insights = [
+        InsightSchema(
+            query_text=str(i.get("query_text", "")),
+            opportunity_score=float(i.get("opportunity_score", 0.0)),
+            estimated_search_volume=int(i.get("estimated_search_volume", 0)),
+            competitive_difficulty=int(i.get("competitive_difficulty", 0)),
+            domain_visible=bool(i.get("domain_visible", False)),
+            visibility_position=i.get("visibility_position"),
+            visibility_status=str(i.get("visibility_status", "unknown")),
+            rationale=str(i.get("rationale", "")),
+        )
+        for i in (run.top_insights or [])
+    ]
     return RunResponse(
         run_uuid=run.run_uuid,
-        profile_uuid=profile_uuid,
-        status=status_value,
+        profile_uuid=run.profile_uuid,
+        status=run.status.value,
         planned_retrieval_calls=run.planned_retrieval_calls,
         extracted_records=run.extracted_records,
-        top_insights=[
-            InsightSchema(
-                query_text=i.query_text,
-                opportunity_score=i.opportunity_score,
-                estimated_search_volume=i.estimated_search_volume,
-                competitive_difficulty=i.competitive_difficulty,
-                domain_visible=i.domain_visible,
-                visibility_position=i.visibility_position,
-                visibility_status=i.visibility_status.value,
-                rationale=i.rationale,
-            )
-            for i in top_insights
-        ],
-        report=ReportSchema(report_json=report_json, report_summary=report_summary),
-        total_tokens=total_tokens,
-        error_flag=error_flag,
+        top_insights=top_insights,
+        report=ReportSchema(
+            report_json=run.report_json or {},
+            report_summary=run.report_summary or "",
+        ),
+        total_tokens=run.total_tokens,
+        error_flag=run.error_flag,
         degraded_reason=degraded_reason,
-        correlation_id=correlation_id,
+        correlation_id=run.correlation_id,
         started_at=run.started_at,
         finished_at=run.finished_at,
     )
 
 
-__all__ = ["run_profile_pipeline"]
+__all__ = [
+    "enqueue_profile_run",
+    "execute_run",
+    "get_run_response",
+    "run_profile_pipeline",
+]

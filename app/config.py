@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     api_host: str = Field(default="0.0.0.0", alias="API_HOST")
     api_port: int = Field(default=8000, ge=1, le=65535, alias="API_PORT")
 
+    # --- Background run execution (async bonus) ---------------------------
+    # Size of the in-process worker pool that executes runs submitted via
+    # ``POST /run?async=true``. Kept small by default; a run is coarse-grained.
+    run_worker_concurrency: int = Field(default=4, ge=1, le=32, alias="RUN_WORKER_CONCURRENCY")
+
     # --- Metadata (not env-driven) ----------------------------------------
     api_title: str = "Agentic Search Intelligence System"
     api_version: str = "1.0.0"

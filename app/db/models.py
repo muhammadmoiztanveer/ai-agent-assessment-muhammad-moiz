@@ -54,12 +54,23 @@ class Base(DeclarativeBase):
 # Enumerations (stored as VARCHAR for cross-dialect portability)
 # --------------------------------------------------------------------------- #
 class RunStatus(enum.StrEnum):
-    """Lifecycle status of a pipeline run."""
+    """Lifecycle status of a pipeline run.
 
+    ``queued`` and ``running`` are transient states used by the asynchronous
+    execution path (``POST /run?async=true``); a synchronous run goes straight to
+    a terminal state. ``completed`` / ``partial`` / ``failed`` are terminal.
+    """
+
+    QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
     PARTIAL = "partial"
     FAILED = "failed"
+
+    @property
+    def is_terminal(self) -> bool:
+        """True once the run has finished (successfully, partially, or failed)."""
+        return self in (RunStatus.COMPLETED, RunStatus.PARTIAL, RunStatus.FAILED)
 
 
 class VisibilityStatus(enum.StrEnum):

@@ -20,6 +20,7 @@ from app.config import Settings, get_settings
 from app.db.database import init_db
 from app.observability import configure_logging
 from app.observability.logging import get_logger
+from app.services.run_queue import init_run_queue, shutdown_run_queue
 
 _logger = get_logger("api")
 
@@ -43,8 +44,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         # Ensure the database schema exists before the app serves traffic.
         init_db(settings)
+        # Start the background worker pool for async runs (spec §4.2 bonus).
+        init_run_queue(settings)
         _logger.info("api.startup", mode=settings.dataforseo_mode, llm=settings.llm_mode)
         yield
+        # Drain in-flight background runs before exiting.
+        shutdown_run_queue(wait=True)
         _logger.info("api.shutdown")
 
     app = FastAPI(
