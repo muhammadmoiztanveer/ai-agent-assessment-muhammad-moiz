@@ -40,7 +40,7 @@ This is the master checklist. Nothing ships until every row is ✅. (Status fill
 | R23 | `GET /api/v1/profiles/{uuid}/queries` filters+pagination+fields (§4.2)                          | `app/api/routes/queries.py`         | ☐      |
 | R24 | `GET /api/v1/profiles/{uuid}/recommendations` + fields (§4.2)                                   | `app/api/routes/recommendations.py` | ☐      |
 | R25 | `POST /api/v1/queries/{uuid}/recheck` partial re-run (§4.2)                                     | `app/api/routes/queries.py`         | ☐      |
-| R26 | Persistence: profiles/runs/queries/recommendations (§5)                                         | `app/db/models.py`                  | ☐      |
+| R26 | Persistence: profiles/runs/queries/recommendations (§5)                                         | `app/db/models.py`                  | ✅     |
 | R27 | README (architecture, setup, agents, failures+example, observability+excerpt, limitations) (§5) | `README.md`                         | ☐      |
 | R28 | Tests: happy path, simulated failure+retry/fallback, tool-arg validation (§5)                   | `tests/`                            | ☐      |
 | R29 | `.env.example` documenting config (§5)                                                          | `.env.example`                      | ☐      |
@@ -620,8 +620,8 @@ and a **git commit** (clear history, §7/R30).
 
 ### Phase 1 — Persistence
 
-- [ ] `db/database.py`, `db/models.py` (4 tables, §3), `db/repositories.py`, `init_db`.
-- [ ] Unit sanity: create/read profile + run round-trip.
+- [x] `db/database.py`, `db/models.py` (4 tables, §3), `db/repositories.py`, `init_db`.
+- [x] Unit sanity: create/read profile + run round-trip (`tests/test_persistence.py`).
 - **Commit:** "feat(db): models + repositories for profiles/runs/queries/recommendations". (R26)
 
 ### Phase 2 — Observability core (build early so everything is instrumented)
