@@ -30,9 +30,9 @@ This is the master checklist. Nothing ships until every row is ✅. (Status fill
 | R13 | Sane timeouts on all external calls (§3.5)                                                      | HTTP client config                  | ☐      |
 | R14 | Graceful degradation / partial results + error flag (§3.5)                                      | fallback node + state               | ☐      |
 | R15 | Circuit breaker (bonus) (§3.5)                                                                  | `app/resilience/circuit_breaker.py` | ☐      |
-| R16 | Structured JSON logs per node (inputs redacted, outputs, duration, success, retries) (§3.6)     | `app/observability/logging.py`      | ☐      |
-| R17 | Trace across run (correlation ID) (§3.6)                                                        | `app/observability/tracing.py`      | ☐      |
-| R18 | Metrics: latency, success/fail rate, API call counts (§3.6)                                     | `app/observability/metrics.py`      | ☐      |
+| R16 | Structured JSON logs per node (inputs redacted, outputs, duration, success, retries) (§3.6)     | `app/observability/logging.py`      | ✅     |
+| R17 | Trace across run (correlation ID) (§3.6)                                                        | `app/observability/tracing.py`      | ✅     |
+| R18 | Metrics: latency, success/fail rate, API call counts (§3.6)                                     | `app/observability/metrics.py`      | ✅     |
 | R19 | README: production observability roadmap (§3.6)                                                 | `README.md`                         | ☐      |
 | R20 | `POST /api/v1/profiles` → 201 shape (§4.1)                                                      | `app/api/routes/profiles.py`        | ☐      |
 | R21 | `GET /api/v1/profiles/{uuid}` + summary stats (§4.1)                                            | `app/api/routes/profiles.py`        | ☐      |
@@ -626,7 +626,8 @@ and a **git commit** (clear history, §7/R30).
 
 ### Phase 2 — Observability core (build early so everything is instrumented)
 
-- [ ] `observability/logging.py` (JSON + redaction), `tracing.py` (correlation id), `metrics.py`.
+- [x] `observability/logging.py` (JSON + redaction), `tracing.py` (correlation id), `metrics.py`.
+- [x] Tests: redaction (+ over-redaction guard), correlation-id propagation, metrics aggregation (`tests/test_observability.py`).
 - **Commit:** "feat(obs): structured logging, correlation-id tracing, metrics collector". (R16–R18)
 
 ### Phase 3 — Resilience core

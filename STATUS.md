@@ -4,8 +4,8 @@
 > Companion docs: [`PLAN.md`](./PLAN.md) (engineering plan) · [`WHAT_TO_BUILD.md`](./WHAT_TO_BUILD.md) (plain-English scope).
 
 **Last updated:** 2026-09-06
-**Current phase:** Phase 2 — Observability core (next)
-**Overall progress:** Phases 0–1 of 11 complete (foundation + persistence ✅)
+**Current phase:** Phase 3 — Resilience core (next)
+**Overall progress:** Phases 0–2 of 11 complete (foundation + persistence + observability ✅)
 
 Legend: ✅ done · 🔄 in progress · ☐ not started
 
@@ -37,12 +37,15 @@ Legend: ✅ done · 🔄 in progress · ☐ not started
 - [x] Verified: ruff + black + mypy (21 files) clean, pytest 6 passed; `init_db()` creates all 4 tables with exact PLAN §3.2 columns
 - [x] Commit: `feat(db): models + repositories for profiles/runs/queries/recommendations`
 
-### ☐ Phase 2 — Observability core
+### ✅ Phase 2 — Observability core
 
-- [ ] `observability/logging.py` (structured JSON + secret redaction)
-- [ ] `observability/tracing.py` (correlation-id context)
-- [ ] `observability/metrics.py` (per-run metrics collector)
-- [ ] Commit: `feat(obs): logging, tracing, metrics`
+- [x] `observability/logging.py` (structlog JSON to stdout + secret redaction via word-segment matching; `log_node_event` helper; wired into app startup)
+- [x] `observability/tracing.py` (correlation-id `contextvar` bound into structlog; `correlation_context`, `timed_span`)
+- [x] `observability/metrics.py` (per-run `RunMetrics`: node latency, success/fail, API-call + retry totals, tokens; `summary`/`log_summary`)
+- [x] `observability/__init__.py` re-exports
+- [x] Tests: `tests/test_observability.py` (redaction incl. over-redaction guard, correlation-id propagation, metrics aggregation, structured summary)
+- [x] Verified: black + ruff + mypy (24 files) clean, pytest 16 passed; live demo shows correlation_id on every line, secrets redacted, `total_tokens` preserved
+- [x] Commit: `feat(obs): structured logging, correlation-id tracing, metrics collector`
 
 ### ☐ Phase 3 — Resilience core
 
@@ -143,9 +146,9 @@ Each row is done only when a file/test proves it.
 | R13 | Sane timeouts on all external calls                       | ☐      | HTTP client config                                                      |
 | R14 | Graceful degradation / partial results + error flag       | ☐      | fallback node + state                                                   |
 | R15 | Circuit breaker (bonus)                                   | ☐      | `app/resilience/circuit_breaker.py`                                     |
-| R16 | Structured JSON logs per node                             | ☐      | `app/observability/logging.py`                                          |
-| R17 | Trace across run (correlation ID)                         | ☐      | `app/observability/tracing.py`                                          |
-| R18 | Metrics: latency, success/fail, API call counts           | ☐      | `app/observability/metrics.py`                                          |
+| R16 | Structured JSON logs per node                             | ✅     | `app/observability/logging.py` + `tests/test_observability.py`          |
+| R17 | Trace across run (correlation ID)                         | ✅     | `app/observability/tracing.py` + `tests/test_observability.py`          |
+| R18 | Metrics: latency, success/fail, API call counts           | ✅     | `app/observability/metrics.py` + `tests/test_observability.py`          |
 | R19 | README: production observability roadmap                  | ☐      | `README.md`                                                             |
 | R20 | `POST /api/v1/profiles` → 201 shape                       | ☐      | `app/api/routes/profiles.py`                                            |
 | R21 | `GET /api/v1/profiles/{uuid}` + summary stats             | ☐      | `app/api/routes/profiles.py`                                            |
@@ -161,21 +164,22 @@ Each row is done only when a file/test proves it.
 | R31 | opportunity_score formula documented                      | ☐      | `app/agents/analysis.py` + README                                       |
 | R32 | total tokens used surfaced                                | ☐      | token callback in LLM client                                            |
 
-**Done:** 2 / 32 (+1 in progress) — feature rows flip as Phases 2–10 land.
+**Done:** 5 / 32 (+1 in progress) — feature rows flip as Phases 3–10 land.
 
 ---
 
-## Verification snapshot (through Phase 1)
+## Verification snapshot (through Phase 2)
 
-| Check          | Command                | Result              |
-| -------------- | ---------------------- | ------------------- |
-| Lint           | `make lint`            | ✅ clean            |
-| Format         | `black --check`        | ✅ clean (24 files) |
-| Type-check     | `make typecheck`       | ✅ clean (21 files) |
-| Tests          | `make test`            | ✅ 6 passed         |
-| API boots      | `make run` → `/health` | ✅ 200 + `/docs`    |
-| DB schema      | `init_db()`            | ✅ 4 tables created |
-| Frontend build | `npm run build`        | ✅ compiles         |
+| Check          | Command                | Result                        |
+| -------------- | ---------------------- | ----------------------------- |
+| Lint           | `make lint`            | ✅ clean                      |
+| Format         | `black --check`        | ✅ clean (28 files)           |
+| Type-check     | `make typecheck`       | ✅ clean (24 files)           |
+| Tests          | `make test`            | ✅ 16 passed                  |
+| API boots      | `make run` → `/health` | ✅ 200 + `/docs`              |
+| DB schema      | `init_db()`            | ✅ 4 tables created           |
+| Observability  | JSON logs + redaction  | ✅ corr-id + secrets scrubbed |
+| Frontend build | `npm run build`        | ✅ compiles                   |
 
 ---
 

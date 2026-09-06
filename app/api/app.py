@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import Settings, get_settings
+from app.observability import configure_logging
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -25,6 +26,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         A configured :class:`fastapi.FastAPI` instance.
     """
     settings = settings or get_settings()
+
+    # Configure structured JSON logging + secret redaction for the whole process.
+    configure_logging(level=settings.log_level)
 
     app = FastAPI(
         title=settings.api_title,
