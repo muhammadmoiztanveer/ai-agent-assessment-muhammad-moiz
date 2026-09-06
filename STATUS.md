@@ -4,8 +4,8 @@
 > Companion docs: [`PLAN.md`](./PLAN.md) (engineering plan) · [`WHAT_TO_BUILD.md`](./WHAT_TO_BUILD.md) (plain-English scope).
 
 **Last updated:** 2026-09-06
-**Current phase:** Phase 10 — README + polish (next)
-**Overall progress:** Phases 0–9 of 11 complete (foundation + persistence + observability + resilience + DataForSEO tools + LLM layer + 5 atomic agents + LangGraph DAG + FastAPI services & endpoints + full spec-mandated test suite ✅)
+**Current phase:** ✅ All phases complete (0–11)
+**Overall progress:** Phases 0–11 of 11 complete (foundation + persistence + observability + resilience + DataForSEO tools + LLM layer + 5 atomic agents + LangGraph DAG + FastAPI services & endpoints + full spec-mandated test suite + graded README + beyond-spec responsive dashboard ✅)
 
 Legend: ✅ done · 🔄 in progress · ☐ not started
 
@@ -131,22 +131,26 @@ Legend: ✅ done · 🔄 in progress · ☐ not started
 - [x] Verified: black clean (77 files), ruff clean, mypy clean (60 app files), **pytest 202 passed** (+61); all hermetic (mock DataForSEO + scripted LLM + temp SQLite), ~1.1s, no network
 - [x] Commit: `test: happy path, failure+retry, fallback, tool validation, API contracts`
 
-### ☐ Phase 10 — README + polish (graded deliverable)
+### ✅ Phase 10 — README + polish (graded deliverable)
 
-- [ ] Full README: architecture, DAG diagram, setup, agents, failures example, observability excerpt, limitations, API reference
-- [ ] Flip all traceability rows to ✅; final lint/type/test pass
-- [ ] Commit: `docs: README with architecture, DAG diagram, failure & observability examples`
+- [x] Full README: architecture + ASCII/Mermaid DAG diagram, setup, the 5 agents, `opportunity_score` formula, API overview + curl walkthrough
+- [x] Worked **simulated-failure** example (how to trigger via `mock_hook`, expected fallback/partial output) + real success **and** degraded JSON log/trace excerpts (correlation-id bound) + production observability roadmap
+- [x] Known limitations & future-improvements section
+- [x] All traceability rows flipped to ✅; final lint/type/test pass (ruff + mypy + black + 202 tests green)
+- [x] Commit: `docs: README with architecture, DAG diagram, failure & observability examples`
 
-### ☐ Phase 11 — Responsive dashboard frontend (beyond-spec)
+### ✅ Phase 11 — Responsive dashboard frontend (beyond-spec)
 
-- [ ] Profile form
-- [ ] Run pipeline + live status
-- [ ] Run summary
-- [ ] Queries table (sort/filter/paginate + recheck)
-- [ ] Insights & recommendations
-- [ ] Report view + trace/log excerpt
-- [ ] Empty/loading/error states everywhere
-- [ ] Commit: `feat(frontend): responsive React dashboard (beyond-spec extra)`
+- [x] `lib/types.ts` (contracts mirroring the API), `lib/api.ts` (typed client + `ApiError` envelope parsing), `lib/format.ts` (presentation helpers)
+- [x] Profile form (`ProfileForm.tsx`) — name/domain/industry/description/competitors, inline validation + error banner
+- [x] Run pipeline + live status (`RunPanel.tsx`) — trigger `POST /run`, spinner during run, status badge, degraded banner
+- [x] Run summary — planned calls, extracted records, total tokens, insight count, run + correlation IDs
+- [x] Queries table (`QueriesTable.tsx`) — sorted by score, `min_score` + visibility-status filters, pagination, per-row **recheck**
+- [x] Insights (top, scored) & recommendations (`Recommendations.tsx`) — content-type, priority, rationale, keyword chips
+- [x] Report view (`ReportView.tsx`) — human summary + run-trace panel (correlation id) + collapsible raw JSON
+- [x] Empty/loading/error states in every panel; mobile-first, keyboard navigable, dark-mode aware; live `/health` connection badge
+- [x] Verified: `npm run build` clean (tsc strict + vite, 25 modules); dev server serves and reaches the API (health polling confirmed in backend logs)
+- [x] Commit: `feat(frontend): responsive React dashboard (beyond-spec extra)`
 
 ---
 
@@ -158,7 +162,7 @@ Each row is done only when a file/test proves it.
 | --- | --------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------- |
 | R1  | Explicit LangGraph DAG, named nodes/edges                 | ✅     | `app/graph/build.py` + `tests/test_graph.py`                                                                   |
 | R2  | Conditional routing + fallback path                       | ✅     | `app/graph/edges.py` + `tests/test_graph.py`                                                                   |
-| R3  | DAG diagram in README                                     | ☐      | `README.md`                                                                                                    |
+| R3  | DAG diagram in README                                     | ✅     | `README.md` (ASCII architecture + Mermaid DAG flow)                                                            |
 | R4  | 5 atomic single-responsibility agents                     | ✅     | `app/agents/{planner,retrieval,extraction,analysis,report}.py` + `tests/test_agents.py`                        |
 | R5  | No agent does two jobs                                    | ✅     | typed contracts in `app/agents/types.py` + per-agent isolation tests                                           |
 | R6  | Tools defined with Pydantic/JSON schemas                  | ✅     | `app/tools/schemas.py` + `tests/test_tools.py`                                                                 |
@@ -174,7 +178,7 @@ Each row is done only when a file/test proves it.
 | R16 | Structured JSON logs per node                             | ✅     | `app/observability/logging.py` + `tests/test_observability.py`                                                 |
 | R17 | Trace across run (correlation ID)                         | ✅     | `app/observability/tracing.py` + `tests/test_observability.py`                                                 |
 | R18 | Metrics: latency, success/fail, API call counts           | ✅     | `app/observability/metrics.py` + `tests/test_observability.py`                                                 |
-| R19 | README: production observability roadmap                  | ☐      | `README.md`                                                                                                    |
+| R19 | README: production observability roadmap                  | ✅     | `README.md` (§ Resilience & observability → production roadmap)                                                |
 | R20 | `POST /api/v1/profiles` → 201 shape                       | ✅     | `app/api/routes/profiles.py` + `app/services/profile_service.py` + `tests/test_api.py`                         |
 | R21 | `GET /api/v1/profiles/{uuid}` + summary stats             | ✅     | `app/api/routes/profiles.py` + `app/services/profile_service.py` + `tests/test_api.py`                         |
 | R22 | `POST /api/v1/profiles/{uuid}/run` full DAG               | ✅     | `app/api/routes/runs.py` + `app/services/pipeline_service.py` + `tests/test_api.py`                            |
@@ -182,18 +186,20 @@ Each row is done only when a file/test proves it.
 | R24 | `GET .../recommendations` + fields                        | ✅     | `app/api/routes/recommendations.py` + `app/services/profile_service.py` + `test_api.py`                        |
 | R25 | `POST /api/v1/queries/{uuid}/recheck` partial re-run      | ✅     | `app/api/routes/queries.py` + `app/services/recheck_service.py` + `tests/test_api.py`                          |
 | R26 | Persistence: profiles/runs/queries/recommendations        | ✅     | `app/db/models.py` + `db/repositories.py` + `tests/test_persistence.py`                                        |
-| R27 | README (architecture, setup, agents, failures, obs, ...)  | ☐      | `README.md`                                                                                                    |
+| R27 | README (architecture, setup, agents, failures, obs, ...)  | ✅     | `README.md` (all sections incl. worked failure example + log excerpts + limitations)                           |
 | R28 | Tests: happy, failure+retry/fallback, tool-arg validation | ✅     | `tests/test_happy_path.py`, `test_failure_retry.py`, `test_fallback_degradation.py`, `test_tool_validation.py` |
 | R29 | `.env.example` documenting config                         | ✅     | `.env.example`                                                                                                 |
-| R30 | Single-command run + clear git history                    | 🔄     | `Makefile`, commits                                                                                            |
+| R30 | Single-command run + clear git history                    | ✅     | `Makefile` (`make install && make run`) + phase-based commit history                                           |
 | R31 | opportunity_score formula documented                      | ✅     | `app/agents/analysis.py` (`opportunity_score`) + `tests/test_agents.py` + README                               |
 | R32 | total tokens used surfaced                                | ✅     | `app/llm/base.py` (`total_tokens`) + `app/llm/client.py` + `tests/test_llm.py`                                 |
 
-**Done:** 28 / 32 (+1 in progress) — remaining rows (R3, R19, R27, R30) flip as Phase 10 lands (R30's clean git history is accumulating with each phase commit).
+**Done:** 32 / 32 — every graded requirement is satisfied with a file/test pointer. R3, R19, R27, and R30
+landed with the Phase 10 README polish; R30's clean, phase-based git history accumulated across every
+phase commit.
 
 ---
 
-## Verification snapshot (through Phase 9)
+## Verification snapshot (through Phase 11 — all phases)
 
 | Check             | Command                     | Result                                                         |
 | ----------------- | --------------------------- | -------------------------------------------------------------- |
@@ -211,7 +217,8 @@ Each row is done only when a file/test proves it.
 | Agents (5 atomic) | chained keyless demo        | ✅ plan→retrieve→extract→analyze→report, per-agent JSON logs   |
 | Graph (DAG)       | `run_pipeline` demo         | ✅ completed / partial / failed routing, fallback, run metrics |
 | End-to-end run    | live `POST /run` (mock)     | ✅ `completed`, planned=7, extracted=4, sorted top insights    |
-| Frontend build    | `npm run build`             | ✅ compiles                                                    |
+| Frontend build    | `npm run build`             | ✅ tsc (strict) + vite clean, 25 modules; full dashboard       |
+| Frontend ↔ API    | `make run-frontend`         | ✅ dev server serves + reaches API (health polling in logs)    |
 
 ---
 

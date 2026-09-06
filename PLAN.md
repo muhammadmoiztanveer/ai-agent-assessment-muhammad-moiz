@@ -17,7 +17,7 @@ This is the master checklist. Nothing ships until every row is ✅. (Status fill
 | --- | ----------------------------------------------------------------------------------------------- | ----------------------------------- | ------ |
 | R1  | Explicit DAG via LangGraph, named nodes/edges (§3.1)                                            | `app/graph/build.py`                | ✅     |
 | R2  | Conditional routing + fallback path (§3.1)                                                      | `app/graph/edges.py`                | ✅     |
-| R3  | DAG diagram in README (§3.1)                                                                    | `README.md` (Mermaid)               | ☐      |
+| R3  | DAG diagram in README (§3.1)                                                                    | `README.md` (Mermaid)               | ✅     |
 | R4  | 5 atomic single-responsibility agents (§3.2)                                                    | `app/agents/*.py`                   | ✅     |
 | R5  | No agent does two jobs (§3.2)                                                                   | Typed contracts + per-agent tests   | ✅     |
 | R6  | Tools defined with Pydantic/JSON schemas (§3.3)                                                 | `app/tools/schemas.py`              | ✅     |
@@ -33,7 +33,7 @@ This is the master checklist. Nothing ships until every row is ✅. (Status fill
 | R16 | Structured JSON logs per node (inputs redacted, outputs, duration, success, retries) (§3.6)     | `app/observability/logging.py`      | ✅     |
 | R17 | Trace across run (correlation ID) (§3.6)                                                        | `app/observability/tracing.py`      | ✅     |
 | R18 | Metrics: latency, success/fail rate, API call counts (§3.6)                                     | `app/observability/metrics.py`      | ✅     |
-| R19 | README: production observability roadmap (§3.6)                                                 | `README.md`                         | ☐      |
+| R19 | README: production observability roadmap (§3.6)                                                 | `README.md`                         | ✅     |
 | R20 | `POST /api/v1/profiles` → 201 shape (§4.1)                                                      | `app/api/routes/profiles.py`        | ✅     |
 | R21 | `GET /api/v1/profiles/{uuid}` + summary stats (§4.1)                                            | `app/api/routes/profiles.py`        | ✅     |
 | R22 | `POST /api/v1/profiles/{uuid}/run` full DAG + response fields (§4.2)                            | `app/api/routes/runs.py`            | ✅     |
@@ -41,10 +41,10 @@ This is the master checklist. Nothing ships until every row is ✅. (Status fill
 | R24 | `GET /api/v1/profiles/{uuid}/recommendations` + fields (§4.2)                                   | `app/api/routes/recommendations.py` | ✅     |
 | R25 | `POST /api/v1/queries/{uuid}/recheck` partial re-run (§4.2)                                     | `app/api/routes/queries.py`         | ✅     |
 | R26 | Persistence: profiles/runs/queries/recommendations (§5)                                         | `app/db/models.py`                  | ✅     |
-| R27 | README (architecture, setup, agents, failures+example, observability+excerpt, limitations) (§5) | `README.md`                         | ☐      |
+| R27 | README (architecture, setup, agents, failures+example, observability+excerpt, limitations) (§5) | `README.md`                         | ✅     |
 | R28 | Tests: happy path, simulated failure+retry/fallback, tool-arg validation (§5)                   | `tests/` (spec-named files)         | ✅     |
-| R29 | `.env.example` documenting config (§5)                                                          | `.env.example`                      | ☐      |
-| R30 | Single-command run + clear git history (§7)                                                     | `Makefile`, commits                 | ☐      |
+| R29 | `.env.example` documenting config (§5)                                                          | `.env.example`                      | ✅     |
+| R30 | Single-command run + clear git history (§7)                                                     | `Makefile`, commits                 | ✅     |
 | R31 | opportunity_score formula documented (§4.2)                                                     | `app/agents/analysis.py` + README   | ✅     |
 | R32 | total tokens used surfaced (§4.2)                                                               | token callback in LLM client        | ✅     |
 
@@ -692,13 +692,13 @@ and a **git commit** (clear history, §7/R30).
 - [x] Verified: black clean (77 files), ruff clean, mypy clean (60 app files), **pytest 202 passed** (+61); fully hermetic (mock DataForSEO + scripted LLM + temp SQLite), ~1.1s, no network.
 - **Commit:** "test: happy path, failure+retry, fallback, tool validation, API contracts". (R28)
 
-### Phase 10 — README + polish
+### Phase 10 — README + polish ✅
 
-- [ ] Full README (§13) incl. Mermaid diagram, simulated-failure example, log/trace excerpt.
-- [ ] Flip all traceability rows to ✅; final lint/type/test pass; verify single-command run.
+- [x] Full README (§13) incl. Mermaid diagram, worked simulated-failure example, real success + degraded log/trace excerpts, production observability roadmap, known limitations, API curl walkthrough.
+- [x] Flipped all traceability rows to ✅; final lint/type/test pass (ruff + mypy 60 files + black 77 files + 202 tests); single-command run verified (`make install && make run`).
 - **Commit:** "docs: README with architecture, DAG diagram, failure & observability examples". (R3, R19, R27, R30)
 
-### Phase 11 — Responsive dashboard frontend (BEYOND SPEC — to impress)
+### Phase 11 — Responsive dashboard frontend (BEYOND SPEC — to impress) ✅
 
 > **Not required by the assessment** (backend-only is the graded scope). Added deliberately as a
 > polished extra. **Only started after Phases 0–10 are 100% ✅** so it never competes with graded work.
@@ -709,18 +709,19 @@ and a **git commit** (clear history, §7/R30).
 - **Responsive & accessible:** mobile-first layout, semantic HTML, keyboard-navigable, ARIA labels,
   visible focus states, color-contrast compliant.
 - **Screens/components:**
-  - [ ] **Profile form** — create/register a profile (name, domain, industry, description, competitors).
-  - [ ] **Run pipeline** — trigger `POST /run`, live status (running/completed/partial/failed), spinner
-        for the 10–30s window, error/partial banner when degraded.
-  - [ ] **Run summary** — planned retrieval calls, extracted records, total tokens, status badge.
-  - [ ] **Queries table** — sortable by `opportunity_score`, filters (`min_score`, visibility `status`),
+  - [x] **Profile form** — create/register a profile (name, domain, industry, description, competitors) with inline validation.
+  - [x] **Run pipeline** — trigger `POST /run`, live status (running/completed/partial/failed), spinner
+        for the run window, error/partial banner when degraded.
+  - [x] **Run summary** — planned retrieval calls, extracted records, total tokens, status badge, run + correlation IDs.
+  - [x] **Queries table** — sorted by `opportunity_score`, filters (`min_score`, visibility `status`),
         pagination; per-row visibility badge + position; "recheck" button → `POST /recheck`.
-  - [ ] **Insights & recommendations** — top insights with scores; recommendation cards (type, title,
+  - [x] **Insights & recommendations** — top insights with scores; recommendation cards (type, title,
         rationale, target keywords, priority).
-  - [ ] **Report view** — human-readable summary + collapsible raw JSON, and a trace/log excerpt panel
+  - [x] **Report view** — human-readable summary + collapsible raw JSON, and a run-trace panel
         (correlation-id) to showcase observability.
-  - [ ] **Empty/loading/error states** for every view (no dead ends).
+  - [x] **Empty/loading/error states** for every view (no dead ends).
 - **Config:** `VITE_API_BASE_URL` env; `make run-frontend` / documented `npm run dev`.
+- **Verified:** `npm run build` clean (tsc strict + vite, 25 modules); dev server serves and reaches the API.
 - **Commit:** "feat(frontend): responsive React dashboard for pipeline runs (beyond-spec extra)".
 
 ---
