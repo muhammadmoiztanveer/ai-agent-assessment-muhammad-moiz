@@ -1,80 +1,82 @@
-import { useEffect, useState } from "react";
-import { getHealth, API_BASE_URL } from "./lib/api";
-
-type Connection =
-  | { state: "checking" }
-  | { state: "online"; version: string }
-  | { state: "offline" };
+import { useState } from "react";
+import { ApiError, runPipeline } from "./lib/api";
+import type { ProfileCreatedResponse, RunResponse } from "./lib/types";
+import { Header } from "./components/Header";
+import { ProfileForm } from "./components/ProfileForm";
+import { RunPanel } from "./components/RunPanel";
+import { QueriesTable } from "./components/QueriesTable";
+import { Recommendations } from "./components/Recommendations";
+import { ReportView } from "./components/ReportView";
 
 export default function App() {
-  const [connection, setConnection] = useState<Connection>({ state: "checking" });
+  const [profile, setProfile] = useState<ProfileCreatedResponse | null>(null);
+  const [run, setRun] = useState<RunResponse | null>(null);
+  const [running, setRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
+  // Bumped after each run / recheck to refresh the dependent panels.
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    getHealth()
-      .then((h) => {
-        if (!cancelled) setConnection({ state: "online", version: h.version });
-      })
-      .catch(() => {
-        if (!cancelled) setConnection({ state: "offline" });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return (
-    <main className="min-h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <div className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center gap-6 px-6 text-center">
-        <span className="rounded-full bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">
-          Beyond-spec dashboard
-        </span>
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-          Agentic Search Intelligence
-        </h1>
-        <p className="max-w-prose text-slate-600 dark:text-slate-400">
-          Frontend foundation is ready. The full pipeline dashboard is built in
-          Phase 11 once the graded backend is complete.
-        </p>
-        <ConnectionBadge connection={connection} />
-      </div>
-    </main>
-  );
-}
-
-function ConnectionBadge({ connection }: { connection: Connection }) {
-  const base =
-    "inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium";
-
-  if (connection.state === "checking") {
-    return (
-      <div className={`${base} border-slate-300 text-slate-500`} aria-live="polite">
-        <Dot className="bg-slate-400" /> Checking backend…
-      </div>
-    );
+  async function handleRun() {
+    if (!profile) return;
+    setRunning(true);
+    setRunError(null);
+    try {
+      const result = await runPipeline(profile.profile_uuid);
+      setRun(result);
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      setRunError(
+        err instanceof ApiError ? err.message : "The pipeline run failed.",
+      );
+    } finally {
+      setRunning(false);
+    }
   }
 
-  if (connection.state === "online") {
-    return (
-      <div
-        className={`${base} border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300`}
-        aria-live="polite"
-      >
-        <Dot className="bg-emerald-500" /> Backend online · v{connection.version}
-      </div>
-    );
+  function handleReset() {
+    setProfile(null);
+    setRun(null);
+    setRunError(null);
   }
 
   return (
-    <div
-      className={`${base} border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300`}
-      aria-live="polite"
-    >
-      <Dot className="bg-rose-500" /> Backend offline · start it at {API_BASE_URL}
+    <div className="min-h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <Header />
+      <main className="mx-auto flex max-w-5xl flex-col gap-5 px-6 py-8">
+        {!profile ? (
+          <ProfileForm onCreated={setProfile} />
+        ) : (
+          <>
+            <RunPanel
+              profile={profile}
+              run={run}
+              running={running}
+              error={runError}
+              onRun={handleRun}
+              onReset={handleReset}
+            />
+
+            {run && (
+              <>
+                <QueriesTable
+                  profileUuid={profile.profile_uuid}
+                  refreshKey={refreshKey}
+                />
+                <Recommendations
+                  profileUuid={profile.profile_uuid}
+                  refreshKey={refreshKey}
+                />
+                <ReportView run={run} />
+              </>
+            )}
+          </>
+        )}
+
+        <footer className="pt-2 text-center text-xs text-slate-400 dark:text-slate-600">
+          Beyond-spec dashboard · the graded backend runs and is testable
+          without it.
+        </footer>
+      </main>
     </div>
   );
-}
-
-function Dot({ className }: { className: string }) {
-  return <span className={`h-2 w-2 rounded-full ${className}`} aria-hidden="true" />;
 }
