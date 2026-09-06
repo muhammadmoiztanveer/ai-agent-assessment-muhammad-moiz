@@ -1,0 +1,28 @@
+# Pinned runtime dependencies (mirror of pyproject.toml [project.dependencies]).
+# Prefer `make install` (installs the package + dev extras from pyproject.toml).
+# These pins reflect the latest stable releases verified at build time.
+
+# --- Orchestration / agents ---
+langgraph>=1.2,<2
+langchain-core>=1.6,<2
+langchain-openai>=1.6,<2
+
+# --- API ---
+fastapi>=0.141,<1
+uvicorn[standard]>=0.52,<1
+
+# --- Validation / config ---
+pydantic>=2.13,<3
+pydantic-settings>=2.15,<3
+
+# --- Persistence ---
+SQLAlchemy>=2.0,<3
+
+# --- HTTP client ---
+httpx>=0.28,<1
+
+# --- Resilience ---
+tenacity>=9.1,<10
+
+# --- Observability ---
+structlog>=26.1,<27
